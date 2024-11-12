@@ -1,5 +1,0 @@
-
-class Position:
-    pass
-
-

@@ -1,32 +1,47 @@
 # distutils: language = c++
 from __future__ import annotations
 
-#%%cython
-
 import numpy as np
 import typing
 import math
 #import itertools
 import math
-#import dataclasses
-#from libcpp.set cimport set as cpp_set
-#cimport libcpp.set.set
-from .errors import *
-from .position import Position
-#from libc.math cimport sin
-from .algorithms import a_star
-import time
+import dataclasses
 
-class HexPos(Position):
+#from .position import Position
+#from .algorithms import a_star
 
-    def __init__(self, q: int, r: int, s: int):
-        self.q = q
-        self.r = r
-        self.s = s
+HexUnit = int
 
-    def __hash__(self):
-        return hash((self.q, self.r, self.s))
 
+HEX_DIRECTIONS = [
+    (1, -1, 0), (1, 0, -1), (0, 1, -1),
+    (-1, 1, 0), (-1, 0, 1), (0, -1, 1),
+]
+
+#HEX_POS_DIRECTIONS = [HexPos(*coords) for coords in HEX_DIRECTIONS]
+class NoPathFound(Exception):
+    @classmethod
+    def from_src_and_dest(cls, src: HexPos, dest: HexPos) -> typing.Self:
+        return cls(f'No path found from {src} to {dest}.')
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class HexPos:
+    '''Hexagonal position object.'''
+    q: HexUnit
+    r: HexUnit
+    s: HexUnit
+
+    @classmethod
+    def from_origin(cls) -> HexPos:
+        return cls(0, 0, 0)
+
+
+    ################################ Work with Coordinates ################################
+    def coords_xy(self):
+        return (self.x, self.y)
+    
     @property
     def x(self):
         return self.q
@@ -34,28 +49,20 @@ class HexPos(Position):
     @property
     def y(self):
         return self.r + (self.q + (self.q&1)) / 2
-
-    def coords_xy(self):
-        return (self.x, self.y)
-
+    
     def coords(self):
         return (self.q, self.r, self.s)
 
-    def __eq__(self, other):
-        return self.coords() == other.coords()
-
-    def __repr__(self):
-        return f'{self.coords()}'
-
-    def dist(self, other) -> int:
+    ################################ Neighbors and regions ################################
+    def distance(self, other: typing.Self) -> int:
         return int((math.fabs(self.q-other.q) + math.fabs(self.r-other.r) + math.fabs(self.s-other.s))//2)
+    
+    def region_sorted(self, target: HexPos, dist: int = 1) -> typing.List[HexPos]:
+        '''Return direct neighbors sorted by distance from target.'''
+        return list(sorted(self.neighbors(dist), key=lambda n: target.dist(n)))
 
-    def offset(self, offset_q: int, offset_r: int, offset_s: int):
-        '''Get a new object with the specified offset coordinates.'''
-        return self.__class__(self.q+offset_q, self.r+offset_r, self.s+offset_s)
-
-    def neighbors(self, dist: int = 1) -> typing.Set[HexPos]:
-        '''Get neighborhood within a given distance.'''
+    def region(self, dist: int = 1) -> typing.Set[HexPos]:
+        '''Get points within a given distance.'''
         positions = set()
         for q in range(-dist, dist+1):
             for r in range(max(-dist, -q-dist), 1+min(dist, -q+dist)):
@@ -64,14 +71,62 @@ class HexPos(Position):
                     positions.add(self.offset(q,r,s))
         return positions
 
-    def sorted_neighbors(self, target: HexPos, dist: int = 1) -> typing.List[HexPos]:
-        '''Return direct neighbors sorted by distance from target.'''
-        return list(sorted(self.neighbors(dist), key=lambda n: target.dist(n)))
-    
-    def shortest_path(self, target: HexPos, allowed_pos: typing.Set[HexPos] = None, 
-            max_dist: int = None, verbose: bool = False) -> typing.List[HexPos]:
-        '''Uses A* to find the shortest path between this position in the target, and None if there is no path.'''
-        return a_star(self, target, allowed_pos, max_dist=max_dist, verbose=verbose)
+    def neighbors(self) -> list[HexPos]:
+        '''Get the six neighboring coordinates.'''
+        return {self.offset(*coords) for coords in HEX_DIRECTIONS}
+
+    def offset(self, offset_q: int, offset_r: int, offset_s: int):
+        '''Get a new object with the specified offset coordinates.'''
+        return self.__class__(self.q+offset_q, self.r+offset_r, self.s+offset_s)
+
+
+    def a_star(
+        self, 
+        goal: HexPos, 
+        allowed_pos: typing.Optional[set[HexPos]] = None, 
+        max_dist: typing.Optional[int] = None
+    ) -> list[HexPos]:
+        '''Compute the A-star algorithm on a hex grid.'''
+
+        open_set: list[HexPos] = [self]
+        came_from: dict[HexPos, HexPos] = {}
+        g_score: dict[HexPos,int] = {self: 0}
+        f_score: dict[HexPos, float] = {self: self.distance(goal)}
+
+        while open_set:
+            current = min(open_set, key=lambda pos: f_score.get(pos, float('inf')))
+            open_set.remove(current)
+
+            if current == goal:
+                path = []
+                while current in came_from:
+                    path.append(current)
+                    current = came_from[current]
+                path.append(self)
+                path.reverse()
+                return path
+
+            for neighbor in current.neighbors():
+                if allowed_pos is not None and neighbor not in allowed_pos:
+                    continue
+
+                tentative_g_score = g_score[current] + 1
+
+                if max_dist is not None and tentative_g_score > max_dist:
+                    continue
+
+                if neighbor not in g_score or tentative_g_score < g_score[neighbor]:
+                    came_from[neighbor] = current
+                    g_score[neighbor] = tentative_g_score
+                    f_score[neighbor] = tentative_g_score + neighbor.distance(goal)
+                    if neighbor not in open_set:
+                        open_set.append(neighbor)
+
+        raise NoPathFound.from_src_and_dest(self, goal)
+
+
+
+    ################################ Pathfinding ################################
 
     def pathfind_dfs(self, target: HexPos, useset: typing.Set[HexPos] = None, 
             max_dist: int = None, verbose: bool = False) -> typing.List[HexPos]:
