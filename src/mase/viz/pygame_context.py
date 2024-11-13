@@ -1,3 +1,4 @@
+import sys
 import pygame
 import typing
 import dataclasses
@@ -14,21 +15,27 @@ class PyGameDisplayIterator:
     ct: int = 0
     clock: pygame.time.Clock = dataclasses.field(default_factory=pygame.time.Clock)
 
+    def __iter__(self):
+        return self
+
     def __next__(self):
         '''Flip the display and handle quit events.'''
 
         # handle quit event
-        #for event in pygame.event.get():
-        #    if event.type == pygame.QUIT:
-        #        pygame.quit()
-        #        sys.exit()
+        events = list()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                #sys.exit()
+                raise StopIteration
+            else:
+                events.append(event)
         
         pygame.display.flip()
-        self.ct += 1
-
-        print('.', end='', flush=True)
-
         self.clock.tick(self.frame_limit)
+
+        self.ct += 1
+        return self.ct, events
 
 
 
@@ -62,9 +69,25 @@ class PyGameCtx:
         '''Draw a polygon on the screen.'''
         #pygame.draw.rect(self.screen, color, points) # Alt: do something like this?
         return pygame.draw.polygon(self.screen, color, points)
+    
+    def insert_image(self, path: str|Path, size: tuple[Height, Width], center: tuple[XPixelCoord, YPixelCoord]) -> None:
+        '''Insert an image at a position.'''
+        image_rect = self.load_image(path=path, size=size).get_rect()
+        image_rect.center = center
+        print(image_rect)
+
+    def blit_image(self, image: pygame.Surface, center: tuple[XPixelCoord, YPixelCoord]) -> None:
+        '''Blit an image at a position.'''
+        image_rect = image.get_rect()
+        image_rect.center = center
+        return self.screen.blit(image, image_rect)
 
     @staticmethod
-    def load_image(path: str|Path, size: tuple[Height, Width] | None = None, **scale_kwargs) -> pygame.Surface:
+    def load_image(
+        path: str|Path, 
+        size: tuple[Height, Width] | None = None, 
+        **scale_kwargs
+    ) -> pygame.Surface:
         im = pygame.image.load(str(path))
         if size is not None:
             return pygame.transform.scale(im, size, **scale_kwargs)

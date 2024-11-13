@@ -68,34 +68,26 @@ class HexGridViz:
 
 
 def main():
-    # Initialize Pygame
-    #pygame.init()
-    #w1 = pygame.display.set_mode((800, 600))
-    #w2 = pygame.display.set_mode((800, 200))
-    #pygame.quit()
     positions = mase.HexPos.from_origin().region(3)
     viz = HexGridViz.from_points((800, 600), positions)
-
-    #sprite_image = pygame.image.load(Path('../data/hex_bg/rock_hexagonal_noborder.png'))
-    #sprite_image = pygame.transform.scale(sprite_image, (20, 20))
     
     with mase.PyGameCtx(size=(800, 600), title='Hexagonal Grid Game') as ctx:
         
         bg_image = ctx.load_image('../data/hex_bg/rock_hexagonal_noborder.png', size=viz.hex_size)
         
 
-        while ctx.display_iter(frame_limit=0.5):
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    pygame.quit()
-                    sys.exit()
+        for i, events in ctx.display_iter(frame_limit=5):
+            print(events)
+            for event in events:
+                print(event)
 
-            ctx.screen.fill((255, 255, 0))
+            ctx.screen.fill((255, 255, 255))
+            #ctx.blit_image(bg_image, ctx.center_point())
             #for hex in hex_grid:
             #    pixel_pos = hex_to_pixel(hex, hex_size)
             #    draw_hexagon(screen, (0, 0, 0), pixel_pos, hex_size)
             #sprite_pixel_pos = hex_to_pixel(sprite_pos, hex_size)
-            ctx.screen.blit(bg_image, (10, 10))
+            #ctx.screen.blit(bg_image, (10, 10))
             #pygame.display.flip()
             #clock.tick(30)
             #pts = viz.get_hexagon_points(mase.HexPos.from_origin(), 1000)
@@ -103,11 +95,13 @@ def main():
             #print(pts)
 
 
-            print('.', end='', flush=True)
-            time.sleep(0.1)
+            #print('.', end='', flush=True)
+            #time.sleep(0.1)
+
+            #pygame.display.flip()
 
 
-
+    print('ended!')
 
 
 
