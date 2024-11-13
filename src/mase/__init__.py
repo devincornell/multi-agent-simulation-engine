@@ -21,3 +21,6 @@
 
 
 from .hexmap import *
+from .viz import *
+
+from .types import *
