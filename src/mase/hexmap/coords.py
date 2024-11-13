@@ -1,4 +1,3 @@
-# distutils: language = c++
 from __future__ import annotations
 
 import numpy as np
@@ -11,17 +10,20 @@ import dataclasses
 #from .position import Position
 #from .algorithms import a_star
 
-from .cart_coord import CartCoord, CartUnit
+#from .cart_coord import CartCoord, CartUnit
+#from .rad_coord import RadialCoord
 
-HexUnit = int
+SQRT_THREE = math.sqrt(3)
 
+
+##################################################### Hexagonal #####################################################
 
 HEX_DIRECTIONS = [
     (1, -1, 0), (1, 0, -1), (0, 1, -1),
     (-1, 1, 0), (-1, 0, 1), (0, -1, 1),
 ]
 
-#HEX_POS_DIRECTIONS = [typing.Self(*coords) for coords in HEX_DIRECTIONS]
+
 class NoPathFound(Exception):
     @classmethod
     def from_src_and_dest(cls, src: typing.Self, dest: typing.Self) -> typing.Self:
@@ -30,37 +32,27 @@ class NoPathFound(Exception):
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class HexCoord:
-    '''Hexagonal position object.'''
-    q: HexUnit
-    r: HexUnit
-    s: HexUnit
+    '''Cubic hexagonal position object. Supports floats or ints.'''
+    q: float
+    r: float
+    s: float
 
     @classmethod
-    def from_origin(cls) -> typing.Self:
+    def origin(cls) -> typing.Self:
+        '''Get the origin coordinate.'''
         return cls(0, 0, 0)
-    
-    @classmethod
-    def from_xy(cls, x: CartUnit, y: CartUnit) -> typing.Self:
-        '''Create a hexagonal position from cartesian coordinates. UNTESTED: written by AI.'''
-        q = x
-        r = y - (x + (x&1)) / 2
-        return cls(q, r, -q-r)
 
-
-    ################################ Work with Coordinates ################################
-    def coords_xy(self) -> CartCoord:
-        return CartCoord(self.x, self.y)
+    ################################ Convert between coordinate systems ################################
+    def to_cartesian(self, flat_top: bool = True) -> CartCoord:
+        '''Convert hexagonal position to cartesian coordinates.'''
+        return CartCoord.from_hex(self, flat_top=flat_top)
     
-    @property
-    def x(self) -> CartUnit:
-        return self.q
-
-    @property
-    def y(self) -> CartUnit:
-        return self.r + (self.q + (self.q&1)) / 2
+    def to_radial(self) -> RadialCoord:
+        '''Convert hexagonal position to radial coordinates.'''
+        return RadialCoord.from_hex(self)
     
-    def coords(self) -> tuple[HexUnit, HexUnit, HexUnit]:
-        return (self.q, self.r, self.s)
+    def as_tuple(self) -> tuple[float, float, float]:
+        return dataclasses.astuple(self)
 
     ################################ Neighbors and regions ################################
     def region_sorted(self, target: typing.Self, dist: int = 1) -> list[typing.Self]:
@@ -86,7 +78,7 @@ class HexCoord:
         return self.__class__(self.q+offset_q, self.r+offset_r, self.s+offset_s)
     
     ################################ Distances and math ################################
-    def distance(self, other: typing.Self) -> HexUnit:
+    def distance(self, other: typing.Self) -> float:
         return (math.fabs(self.q-other.q) + math.fabs(self.r-other.r) + math.fabs(self.s-other.s))/2
     
     ################################ pathfinding ################################
@@ -255,3 +247,82 @@ class HexCoord:
             if verbose: print('--------------------------------\n')
             
         return current_path
+
+
+
+##################################################### Cartesian #####################################################
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class CartCoord:
+    '''Hexagonal position object.'''
+    x: float
+    y: float
+
+    @classmethod
+    def origin(cls) -> CartCoord:
+        return cls(0, 0)
+    
+    def from_radial(cls, radial: RadialCoord) -> typing.Self:
+        '''Create a cartesian coordinate from a radial coordinate.'''
+        return cls(
+            x = radial.rho * math.cos(radial.theta),
+            y = radial.rho * math.sin(radial.theta),
+        )
+    
+    @classmethod
+    def from_hex(cls, hexpos: HexCoord, flat_top: bool = True) -> typing.Self:
+        '''Create a cartesian coordinate from a hexagonal position.
+        Description:
+            Formulas for pointy-topped grid:
+                x_{\text{cartesian}} &= \sqrt{3} \left(q + \frac{r}{2}\right) \\
+                y_{\text{cartesian}} &= \frac{3}{2} r
+            Formulas for flat-topped grid:
+                x &= \text{size} \times \left( \dfrac{3}{2} \times q \right) \\
+                y &= \text{size} \times \left( \sqrt{3} \times \left( r + \dfrac{q}{2} \right) \right)
+        '''
+        if flat_top:
+            return cls(
+                x = 3/2 * hexpos.q,
+                y = SQRT_THREE * (hexpos.r + hexpos.q/2),
+            )
+        else:
+            return cls(
+                x = SQRT_THREE * (hexpos.q + hexpos.r/2),
+                y = 3/2 * hexpos.r,
+            )
+        
+
+    def __add__(self, other: typing.Self) -> typing.Self:
+        return self.__class__(self.x + other.x, self.y + other.y)
+
+    def __getitem__(self, key: int) -> float:
+        if key == 0:
+            return self.x
+        elif key == 1:
+            return self.y
+        else:
+            raise IndexError(f'Index {key} out of range for CartCoord.')
+        
+    def as_tuple(self) -> tuple[float, float]:
+        return dataclasses.astuple(self)
+
+
+##################################################### Radial #####################################################
+@dataclasses.dataclass(frozen=True, slots=True)
+class RadialCoord:
+    '''Hexagonal position object.'''
+    rho: float
+    theta: float
+
+    def from_hex(cls, hexpos: HexCoord) -> RadialCoord:
+        '''Create a radial coordinate from a hexagonal position.
+        Description: 
+            These are the formulas:
+                \rho = \sqrt{3(q^2 + qr + r^2)}
+                \theta = \arctan\left(\frac{\sqrt{3}(q + 2r)}{3q}\right)
+        '''
+        return cls(
+            rho = math.sqrt(3 * (hexpos.q**2 + hexpos.r*hexpos.q + hexpos.r**2)),
+            theta = math.atan2(SQRT_THREE * (hexpos.q + 2*hexpos.r) / 3*hexpos.q),
+        )
+
