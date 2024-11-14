@@ -65,22 +65,30 @@ class PyGameCtx:
         return self.size[0] // 2, self.size[1] // 2
 
     ################################ Image Loading ################################
-    def draw_polygon(self, color: ColorRGB, points: list[tuple[XPixelCoord, YPixelCoord]]) -> None:
+    def draw_path(self, points: list[tuple[XPixelCoord, YPixelCoord]], color: ColorRGB, width: int = 1, closed: bool = False) -> None:
+        '''Draw a path on the screen. Wrapper over pygame.draw.lines. '''
+        return pygame.draw.lines(
+            surface=self.screen, 
+            color=color, 
+            closed=closed, 
+            points=points, 
+            width=width
+        )
+
+    def draw_polygon(self, points: list[tuple[XPixelCoord, YPixelCoord]], color: ColorRGB, width: int = 1) -> None:
         '''Draw a polygon on the screen.'''
         #pygame.draw.rect(self.screen, color, points) # Alt: do something like this?
-        return pygame.draw.polygon(self.screen, color, points)
+        return pygame.draw.polygon(self.screen, color, points, width=width)
     
-    def insert_image(self, path: str|Path, size: tuple[Height, Width], center: tuple[XPixelCoord, YPixelCoord]) -> None:
-        '''Insert an image at a position.'''
-        image_rect = self.load_image(path=path, size=size).get_rect()
-        image_rect.center = center
-        print(image_rect)
-
     def blit_image(self, image: pygame.Surface, center: tuple[XPixelCoord, YPixelCoord]) -> None:
         '''Blit an image at a position.'''
         image_rect = image.get_rect()
         image_rect.center = center
         return self.screen.blit(image, image_rect)
+    
+
+
+
 
     @staticmethod
     def load_image(
