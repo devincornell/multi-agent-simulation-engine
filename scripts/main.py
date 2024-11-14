@@ -12,6 +12,8 @@ import mase
 
 
 
+
+
 def main():
     region = [(o := mase.HexCoord.origin())] + list(o.region(10))
     #positions = origin.region(3)
@@ -28,15 +30,21 @@ def main():
     with mase.PyGameCtx(size=scaler.screen_size, title='Hexagonal Grid Game') as ctx:
         
         bg_image = ctx.load_image('../data/hex_bg/rock_hexagonal_noborder.png', size=scaler.hex_size)
+        viz.prepend_all([bg_image], do_scale=True)
+
+        def handle_mouse_click(event):
+            click_pos = pygame.mouse.get_pos()
+            print(click_pos)
         
+        display = ctx.display_iter(
+            frame_limit=30,
+            event_callbacks={
+                pygame.MOUSEBUTTONDOWN: handle_mouse_click,
+            },
+        )
 
-        for i, events in ctx.display_iter(frame_limit=5):
-            for event in events:
-                if event.type == pygame.MOUSEBUTTONUP:
-                    click_pos = pygame.mouse.get_pos()
-                print(event)
-
-            ctx.screen.fill((255, 255, 255))
+        for i, events in display:
+            ctx.screen.fill(pygame.Color('white'))
 
             viz.draw(ctx, hex_outline=True)
             
@@ -44,7 +52,7 @@ def main():
             path = mase.HexCoord.origin().a_star(mase.HexCoord(3, 2, -5), set(region))
             ctx.draw_path(
                 points=[viz[p].center for p in path],
-                color=(255,0,0), 
+                color=pygame.Color('red'), 
                 width=3, 
                 closed=False
             )
