@@ -41,7 +41,59 @@ class HexCoord:
     def origin(cls) -> typing.Self:
         '''Get the origin coordinate.'''
         return cls(0, 0, 0)
+    
+    @classmethod
+    def from_cartesian(cls, c: CartCoord, flat_top: bool = True) -> typing.Self:
+        '''Convert hexagonal position to cartesian coordinates.
+            === FLAT TOP ===
 
+            Premise: given q and r, we can calculate x and y.
+            x = 3/2 * q
+            y = √3 * (r + q/2)
+
+            # cartesian to hex: given x and y, calculate q and r
+            # q is easy - inverse of 2/3.
+            q = 2/3 * x
+
+            # r is harder: invert the previous function
+            y = √3 * (r + q/2) 
+            r + q/2 = y / √3 divide by √3 and flip sides
+            r + (2/3)x/2 = y / √3
+            r + (1/3)x = y / √3
+            r = y/√3 - x/3
+
+
+            === NON FLAT TOP ===
+            premis: given q and r, we can calculate x and y.
+            x = √3 * (q + r/2)
+            y = 3/2 * r
+
+            # cartesian to hex: given x and y, calculate q and r
+            # q is easy - inverse of √3.
+            r = (2/3)y
+
+            # r is harder: invert the previous function
+            x/√3 = q + r/2
+            x/√3 = q + (2/3)y/2 # replace r with (2/3)y
+            q = x/√3 - y/3 # move y/3 to the other side
+        '''
+
+        if flat_top:
+            return cls.from_rq(
+                q = 2/3 * c.x,
+                r = c.y / SQRT_THREE - c.x/3,
+            )
+        else:
+            return cls.from_rq(
+                q = c.x/SQRT_THREE - c.y/3,
+                r = 2/3 * c.y,
+            )
+    
+    @classmethod
+    def from_rq(cls, r: float, q: float) -> typing.Self:
+        '''Create a hexagonal position from r and q: r + q + s = 0.'''
+        return cls(q, r, -q-r)
+    
     ################################ Convert between coordinate systems ################################
     def to_cartesian(self, flat_top: bool = True) -> CartCoord:
         '''Convert hexagonal position to cartesian coordinates.'''
@@ -53,6 +105,16 @@ class HexCoord:
     
     def as_tuple(self) -> tuple[float, float, float]:
         return dataclasses.astuple(self)
+    
+    ################################ comparisons ################################
+    def isclose(self, other: typing.Self, rel_tol: float = 1e-9, abs_tol: float = 1e-9) -> bool:
+        '''Check if two hexagonal positions are close.'''
+        return all([
+            math.isclose(self.q, other.q, rel_tol=rel_tol, abs_tol=abs_tol),
+            math.isclose(self.r, other.r, rel_tol=rel_tol, abs_tol=abs_tol),
+            math.isclose(self.s, other.s, rel_tol=rel_tol, abs_tol=abs_tol),
+        ])
+
 
     ################################ Neighbors and regions ################################
     def region_sorted(self, target: typing.Self, dist: int = 1) -> list[typing.Self]:
@@ -290,7 +352,10 @@ class CartCoord:
                 x = SQRT_THREE * (hexpos.q + hexpos.r/2),
                 y = 3/2 * hexpos.r,
             )
-        
+    
+    def to_hex(self, flat_top: bool = True) -> HexCoord:
+        '''Convert cartesian coordinate to hexagonal position.'''
+        return HexCoord.from_cartesian(self, flat_top=flat_top)
 
     def __add__(self, other: typing.Self) -> typing.Self:
         return self.__class__(self.x + other.x, self.y + other.y)
