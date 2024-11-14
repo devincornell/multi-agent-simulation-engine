@@ -7,11 +7,10 @@ from pathlib import Path
 
 from ..hexmap import HexCoord, CartCoord, SQRT_THREE
 from .hexgrid_scaler import HexGridScaler
+from ..types import Width, Height, XPixelCoord, YPixelCoord, ColorRGB
 
-
-if typing.TYPE_CHECKING:
-    from ..types import Width, Height, XPixelCoord, YPixelCoord, ColorRGB
-    from .pygame_context import PyGameCtx
+#if typing.TYPE_CHECKING:
+from .pygame_context import PyGameCtx
 
 @dataclasses.dataclass
 class HexMapLoc:
@@ -54,7 +53,7 @@ class HexMapLoc:
         for i in range(6):
             angle = math.radians(60 * i)
             x = self.center[0] + self.size[0] * math.cos(angle)  / 2
-            y = self.center[1] + self.size[1] * math.sin(angle) / mase.SQRT_THREE
+            y = self.center[1] + self.size[1] * math.sin(angle) / SQRT_THREE
             points.append((x, y))
         return points
     

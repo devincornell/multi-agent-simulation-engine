@@ -13,11 +13,11 @@ import dataclasses
 #from .cart_coord import CartCoord, CartUnit
 #from .rad_coord import RadialCoord
 
-SQRT_THREE = math.sqrt(3)
+
 
 
 ##################################################### Hexagonal #####################################################
-
+SQRT_THREE = math.sqrt(3)
 HEX_DIRECTIONS = [
     (1, -1, 0), (1, 0, -1), (0, 1, -1),
     (-1, 1, 0), (-1, 0, 1), (0, -1, 1),

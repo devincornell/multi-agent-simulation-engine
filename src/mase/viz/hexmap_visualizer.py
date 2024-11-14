@@ -8,11 +8,12 @@ from pathlib import Path
 
 from ..hexmap import HexCoord, CartCoord, SQRT_THREE
 from .hexmap_loc import HexMapLoc
+from .hexgrid_scaler import HexGridScaler
 
 if typing.TYPE_CHECKING:
     from ..types import Width, Height, XPixelCoord, YPixelCoord, ColorRGB
-    from .pygame_context import PyGameCtx
-    from .hexgrid_scaler import HexGridScaler
+from .pygame_context import PyGameCtx
+    
 
 
 @dataclasses.dataclass
