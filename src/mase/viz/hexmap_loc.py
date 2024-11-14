@@ -37,14 +37,34 @@ class HexMapLoc:
         if hex_outline:
             hex_points = self.get_hexagon_points()
             ctx.draw_path(hex_points, (0,0,0), width=2, closed=True)
-
-    def set_images(self, images: list[pygame.Surface], do_scale: bool = False):
+    
+    ################################ updating images ################################
+    def set_images(self, images: list[pygame.Surface], do_scale: bool = False) -> None:
         '''Set the images to be drawn. Not done every iteration.'''
         if do_scale:
             self.images = [pygame.transform.scale(image, self.size) for image in images]
         else:
             self.images = list(images)
 
+    def append_images(self, images: list[pygame.Surface], do_scale: bool = False) -> None:
+        '''Add an image to the end of the list.'''
+        if do_scale:
+            new_images = [pygame.transform.scale(im, self.size) for im in images]
+        else:
+            new_images = list(images)
+            
+        self.images += new_images
+
+    def prepend_images(self, images: list[pygame.Surface], do_scale: bool = False) -> None:
+        '''Add an image to the front of the list.'''
+        if do_scale:
+            new_images = [pygame.transform.scale(im, self.size) for im in images]
+        else:
+            new_images = list(images)
+            
+        self.images = new_images + self.images
+    
+    ################################ Generating shapes ################################
     def get_hexagon_points(
         self,
     ) -> list[tuple[XPixelCoord, YPixelCoord]]:
