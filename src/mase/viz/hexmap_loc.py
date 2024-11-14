@@ -15,7 +15,7 @@ from .pygame_context import PyGameCtx
 @dataclasses.dataclass
 class HexMapLoc:
     '''State needed to draw a single hex location on the map.'''
-    images: list[pygame.Surface]
+    surfaces: dict[str, pygame.Surface]
     center: tuple[XPixelCoord, YPixelCoord]
     size: tuple[Width, Height]
 
@@ -23,46 +23,57 @@ class HexMapLoc:
     def from_hex_coord(cls, scaler: HexGridScaler, hex_coord: HexCoord):
         '''Create a HexMapLoc from a hex coordinate.'''
         return cls(
-            images=[],
+            surfaces=dict(),
             center=scaler.hex_to_px(hex_coord),
             size=scaler.hex_background_size(),
         )
     
     ################################ Drawing ################################
-    def draw(self, ctx: PyGameCtx, hex_outline: bool = False):
+    def draw(self, ctx: PyGameCtx, hex_outline: pygame.Color | None = None, width: int = 1):
         '''Draw the hexagon on the screen.'''
-        for image in self.images:
-            ctx.blit_image(image, self.center)
+        for surf in self.surfaces.values():
+            ctx.blit_image(surf, self.center)
 
-        if hex_outline:
+        if hex_outline is not None:
             hex_points = self.get_hexagon_points()
-            ctx.draw_path(hex_points, (0,0,0), width=2, closed=True)
+            ctx.draw_path(hex_points, hex_outline, width=width, closed=True)
     
-    ################################ updating images ################################
-    def set_images(self, images: list[pygame.Surface], do_scale: bool = False) -> None:
-        '''Set the images to be drawn. Not done every iteration.'''
-        if do_scale:
-            self.images = [pygame.transform.scale(image, self.size) for image in images]
-        else:
-            self.images = list(images)
+    ################################ updating surfaces ################################
+    def delete_surface(self, key: str, fail_if_dne: bool = False):
+        '''Delete a surface from the dictionary.'''
+        def apply_func(surfaces: dict[str,pygame.Surface]) -> dict[str,pygame.Surface]:
+            surfaces = dict(surfaces)
 
-    def append_images(self, images: list[pygame.Surface], do_scale: bool = False) -> None:
-        '''Add an image to the end of the list.'''
-        if do_scale:
-            new_images = [pygame.transform.scale(im, self.size) for im in images]
-        else:
-            new_images = list(images)
+            if fail_if_dne and key not in surfaces:
+                raise ValueError(f'Key {key} does not exist in surfaces.')
             
-        self.images += new_images
+            del surfaces[key]
+            return surfaces
+        
+        return self.apply_surfaces(apply_func)
 
-    def prepend_images(self, images: list[pygame.Surface], do_scale: bool = False) -> None:
-        '''Add an image to the front of the list.'''
+    def insert_surface(self, key: str, surface: pygame.Surface, fail_if_exists: bool = False, do_scale: bool = False):
+        '''Insert a surface into the dictionary.'''
         if do_scale:
-            new_images = [pygame.transform.scale(im, self.size) for im in images]
-        else:
-            new_images = list(images)
-            
-        self.images = new_images + self.images
+            surface = pygame.transform.scale(surface, self.size)
+
+        def apply_func(surfaces: dict[str,pygame.Surface]) -> dict[str,pygame.Surface]:
+            surfaces = dict(surfaces)
+            if fail_if_exists and key in surfaces:
+                raise ValueError(f'Key {key} already exists in surfaces.')
+            surfaces[key] = surface
+            return surfaces
+        
+        return self.apply_surfaces(apply_func)
+
+    def apply_surfaces(self, apply_func: typing.Callable[[dict[str,pygame.Surface]], dict[str,pygame.Surface]]) -> dict[str,pygame.Surface]:
+        '''Apply a function to the surfaces, return the resulting surfaces dictionary.'''
+        self.surfaces = apply_func(self.surfaces)
+        return self.surfaces
+
+    def get_surfaces(self) -> dict[str, pygame.Surface]:
+        '''Get the surfaces.'''
+        return self.surfaces
     
     ################################ Generating shapes ################################
     def get_hexagon_points(

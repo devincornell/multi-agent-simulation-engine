@@ -30,7 +30,7 @@ def main():
     with mase.PyGameCtx(size=scaler.screen_size, title='Hexagonal Grid Game') as ctx:
         
         bg_image = ctx.load_image('../data/hex_bg/rock_hexagonal_noborder.png', size=scaler.hex_size)
-        viz.prepend_all([bg_image], do_scale=True)
+        viz.insert_image_all('bg', bg_image, do_scale=True)
 
         def handle_mouse_click(event):
             click_pos = pygame.mouse.get_pos()
@@ -46,7 +46,7 @@ def main():
         for i, events in display:
             ctx.screen.fill(pygame.Color('white'))
 
-            viz.draw(ctx, hex_outline=True)
+            viz.draw(ctx, hex_outline=pygame.Color('green'))
             
             # additional drawing
             path = mase.HexCoord.origin().a_star(mase.HexCoord(3, 2, -5), set(region))
