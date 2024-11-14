@@ -19,7 +19,12 @@ HEX_OVERLAP = 2/3
 
 @dataclasses.dataclass
 class HexGridScaler:
-    '''Manages translations between hex coords and pixel space.'''
+    '''Manages translations between game coordinates (hex or cartesian) and pixel space.
+    Description:
+        main parameters: offset and scale
+        coord -> pixel: (coord - offset) * scale
+        pixel -> coord: (pixel / scale) + offset
+    '''
     screen_size: tuple[Width, Height]
     offset: tuple[Width, Height] # coord -> pixels
     scale: tuple[XScale, YScale] # coord -> pixels
@@ -60,6 +65,17 @@ class HexGridScaler:
         return (
             round((cart_coord.x - self.offset[0]) * self.scale[0]),
             round((cart_coord.y - self.offset[1]) * self.scale[1]),
+        )
+    
+    def px_to_hex(self, pixel_pos: tuple[XPixelCoord, YPixelCoord]) -> HexCoord:
+        '''Convert pixel coordinate to hex coordinate.'''
+        return self.px_to_cart(pixel_pos).to_hex(flat_top=self.flat_top)
+    
+    def px_to_cart(self, pixel_pos: tuple[XPixelCoord, YPixelCoord]) -> CartCoord:
+        '''Convert pixel coordinate to cartesian coordinate.'''
+        return CartCoord(
+            x = pixel_pos[0] / self.scale[0] + self.offset[0],
+            y = pixel_pos[1] / self.scale[1] + self.offset[1],
         )
             
     ################################ Coordinate Translations ################################

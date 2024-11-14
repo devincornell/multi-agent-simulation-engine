@@ -121,19 +121,39 @@ class PyGameCtx:
         image_rect = image.get_rect()
         image_rect.center = center
         return self.screen.blit(image, image_rect)
-    
 
-
-
-
-    @staticmethod
+    ################################ Utility Methods ################################
+    @classmethod
     def load_image(
+        cls,
         path: str|Path, 
         size: tuple[Height, Width] | None = None, 
+        keep_ratio: bool = True,
         **scale_kwargs
     ) -> pygame.Surface:
         im = pygame.image.load(str(path))
         if size is not None:
-            return pygame.transform.scale(im, size, **scale_kwargs)
+            im = cls.scale_image(im, size, keep_ratio, **scale_kwargs)
+        return im
+
+    @classmethod
+    def scale_image(
+        cls,
+        surface: pygame.Surface, 
+        size: tuple[Height, Width], 
+        keep_ratio: bool = True,
+        scale_func: typing.Callable[[pygame.Surface, tuple[Width, Height]], pygame.Surface] = pygame.transform.smoothscale,
+        **scale_kwargs
+    ) -> pygame.Surface:
+        '''Scale an image.'''
+        if keep_ratio:
+            ratio = surface.get_width() / surface.get_height()
+            w, h = size
+            if w / h > ratio:
+                size = (int(h * ratio), h)
+            else:
+                size = (w, int(w / ratio))
+            return scale_func(surface, size, **scale_kwargs)
         else:
-            return im
+            return scale_func(surface, size, **scale_kwargs)
+

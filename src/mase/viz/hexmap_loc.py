@@ -39,41 +39,44 @@ class HexMapLoc:
             ctx.draw_path(hex_points, hex_outline, width=width, closed=True)
     
     ################################ updating surfaces ################################
-    def delete_surface(self, key: str, fail_if_dne: bool = False):
-        '''Delete a surface from the dictionary.'''
-        def apply_func(surfaces: dict[str,pygame.Surface]) -> dict[str,pygame.Surface]:
-            surfaces = dict(surfaces)
-
-            if fail_if_dne and key not in surfaces:
-                raise ValueError(f'Key {key} does not exist in surfaces.')
-            
-            del surfaces[key]
-            return surfaces
-        
-        return self.apply_surfaces(apply_func)
-
-    def insert_surface(self, key: str, surface: pygame.Surface, fail_if_exists: bool = False, do_scale: bool = False):
-        '''Insert a surface into the dictionary.'''
-        if do_scale:
-            surface = pygame.transform.scale(surface, self.size)
-
-        def apply_func(surfaces: dict[str,pygame.Surface]) -> dict[str,pygame.Surface]:
-            surfaces = dict(surfaces)
-            if fail_if_exists and key in surfaces:
-                raise ValueError(f'Key {key} already exists in surfaces.')
-            surfaces[key] = surface
-            return surfaces
-        
-        return self.apply_surfaces(apply_func)
-
     def apply_surfaces(self, apply_func: typing.Callable[[dict[str,pygame.Surface]], dict[str,pygame.Surface]]) -> dict[str,pygame.Surface]:
         '''Apply a function to the surfaces, return the resulting surfaces dictionary.'''
         self.surfaces = apply_func(self.surfaces)
         return self.surfaces
 
+    def insert_scale_surface(self, 
+        key: str, 
+        surface: pygame.Surface, 
+        do_scale: bool = False,
+        keep_ratio: bool = True,
+        scale_func: typing.Callable[[pygame.Surface, tuple[Width, Height]], pygame.Surface] = pygame.transform.smoothscale,
+        **scale_kwargs
+    ) -> None:
+        '''Insert a surface into the dictionary.'''
+        if do_scale:
+            surface = PyGameCtx.scale_image(surface, self.size, keep_ratio, scale_func=scale_func, **scale_kwargs)
+        self.surfaces[key] = surface
+
     def get_surfaces(self) -> dict[str, pygame.Surface]:
         '''Get the surfaces.'''
         return self.surfaces
+    
+    ################################ dunder for updating surfaces ################################
+    def __contains__(self, key: str) -> bool:
+        '''Check if a surface is in the dictionary.'''
+        return key in self.surfaces
+    
+    def __getitem__(self, key: str) -> pygame.Surface:
+        '''Get a surface from the dictionary.'''
+        return self.surfaces[key]
+    
+    def __setitem__(self, key: str, value: pygame.Surface) -> None:
+        '''Set a surface in the dictionary.'''
+        self.surfaces[key] = value
+    
+    def __delitem__(self, key: str) -> None:
+        '''Delete a surface from the dictionary.'''
+        del self.surfaces[key]
     
     ################################ Generating shapes ################################
     def get_hexagon_points(
@@ -88,8 +91,4 @@ class HexMapLoc:
             points.append((x, y))
         return points
     
-    ################################ Other Location Calculations ################################
-    def get_topleft(self, pos: HexCoord) -> tuple[XPixelCoord, YPixelCoord]:
-        '''Get the top-left corner of the hexagon square.'''
-        return pos.x * self.hex_size[0] * HEX_OVERLAP + self.offset[0], pos.y * self.hex_size[1] + self.offset[1]
 

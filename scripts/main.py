@@ -15,7 +15,7 @@ import mase
 
 
 def main():
-    region = [(o := mase.HexCoord.origin())] + list(o.region(10))
+    region = [(o := mase.HexCoord.origin())] + list(o.region(5))
     #positions = origin.region(3)
     scaler = mase.HexGridScaler.from_points((800, 800), region)
     viz = mase.HexMapVizualizer.from_points(scaler, region)
@@ -29,12 +29,21 @@ def main():
     #exit()
     with mase.PyGameCtx(size=scaler.screen_size, title='Hexagonal Grid Game') as ctx:
         
-        bg_image = ctx.load_image('../data/hex_bg/rock_hexagonal_noborder.png', size=scaler.hex_size)
-        viz.insert_image_all('bg', bg_image, do_scale=True)
+        red_nosword = ctx.load_image('../data/sprites/redknight_nosword.png', size=scaler.hex_background_size())
+        red_withsword = ctx.load_image('../data/sprites/redknight_withsword.png', size=scaler.hex_background_size())
+        bg_image = ctx.load_image('../data/hex_bg/rock_hexagonal_noborder.png', size=scaler.hex_background_size())
 
-        def handle_mouse_click(event):
+        viz.insert_image_all('bg', bg_image, do_scale=False)
+
+        def handle_mouse_click(event, key: str = 'character'):
             click_pos = pygame.mouse.get_pos()
-            print(click_pos)
+            pos = scaler.px_to_hex(click_pos).closest(region)
+            if key in viz[pos]:
+                del viz[pos][key] # remove if exists
+            else:
+                viz[pos][key] = red_withsword # add if does not
+
+            
         
         display = ctx.display_iter(
             frame_limit=30,
@@ -44,9 +53,11 @@ def main():
         )
 
         for i, events in display:
-            ctx.screen.fill(pygame.Color('white'))
-
-            viz.draw(ctx, hex_outline=pygame.Color('green'))
+            
+            viz.draw(
+                ctx = ctx, 
+                hex_outline=pygame.Color('green'),
+            )
             
             # additional drawing
             path = mase.HexCoord.origin().a_star(mase.HexCoord(3, 2, -5), set(region))

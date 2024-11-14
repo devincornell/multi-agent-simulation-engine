@@ -81,16 +81,6 @@ class HexCoord:
     def as_tuple(self) -> tuple[float, float, float]:
         return dataclasses.astuple(self)
     
-    ################################ comparisons ################################
-    def isclose(self, other: typing.Self, rel_tol: float = 1e-9, abs_tol: float = 1e-9) -> bool:
-        '''Check if two hexagonal positions are close.'''
-        return all([
-            math.isclose(self.q, other.q, rel_tol=rel_tol, abs_tol=abs_tol),
-            math.isclose(self.r, other.r, rel_tol=rel_tol, abs_tol=abs_tol),
-            math.isclose(self.s, other.s, rel_tol=rel_tol, abs_tol=abs_tol),
-        ])
-
-
     ################################ Neighbors and regions ################################
     def region_sorted(self, target: typing.Self, dist: int = 1) -> list[typing.Self]:
         '''Return direct neighbors sorted by distance from target.'''
@@ -114,10 +104,22 @@ class HexCoord:
         '''Get a new object with the specified offset coordinates.'''
         return self.__class__(self.q+offset_q, self.r+offset_r, self.s+offset_s)
     
-    ################################ Distances and math ################################
+    ################################ comparisons ################################
+    def closest(self, positions: list[typing.Self]) -> typing.Self:
+        '''Get the closest position to a list of positions.'''
+        return min(positions, key=lambda pos: self.distance(pos))
+
     def distance(self, other: typing.Self) -> float:
         return (math.fabs(self.q-other.q) + math.fabs(self.r-other.r) + math.fabs(self.s-other.s))/2
     
+    def isclose(self, other: typing.Self, rel_tol: float = 1e-9, abs_tol: float = 1e-9) -> bool:
+        '''Check if two hexagonal positions are close.'''
+        return all([
+            math.isclose(self.q, other.q, rel_tol=rel_tol, abs_tol=abs_tol),
+            math.isclose(self.r, other.r, rel_tol=rel_tol, abs_tol=abs_tol),
+            math.isclose(self.s, other.s, rel_tol=rel_tol, abs_tol=abs_tol),
+        ])
+
     ################################ pathfinding ################################
     def a_star(
         self, 
