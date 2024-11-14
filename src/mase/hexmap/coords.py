@@ -45,37 +45,12 @@ class HexCoord:
     @classmethod
     def from_cartesian(cls, c: CartCoord, flat_top: bool = True) -> typing.Self:
         '''Convert hexagonal position to cartesian coordinates.
-            === FLAT TOP ===
-
-            Premise: given q and r, we can calculate x and y.
-            x = 3/2 * q
-            y = √3 * (r + q/2)
-
-            # cartesian to hex: given x and y, calculate q and r
-            # q is easy - inverse of 2/3.
-            q = 2/3 * x
-
-            # r is harder: invert the previous function
-            y = √3 * (r + q/2) 
-            r + q/2 = y / √3 divide by √3 and flip sides
-            r + (2/3)x/2 = y / √3
-            r + (1/3)x = y / √3
-            r = y/√3 - x/3
-
-
-            === NON FLAT TOP ===
-            premis: given q and r, we can calculate x and y.
-            x = √3 * (q + r/2)
-            y = 3/2 * r
-
-            # cartesian to hex: given x and y, calculate q and r
-            # q is easy - inverse of √3.
-            r = (2/3)y
-
-            # r is harder: invert the previous function
-            x/√3 = q + r/2
-            x/√3 = q + (2/3)y/2 # replace r with (2/3)y
-            q = x/√3 - y/3 # move y/3 to the other side
+            For flat top:
+                q = 2/3 * x
+                r = y/√3 - x/3
+            For pointy top:
+                q = x/√3 - y/3
+                r = (2/3)y
         '''
 
         if flat_top:
@@ -94,7 +69,7 @@ class HexCoord:
         '''Create a hexagonal position from r and q: r + q + s = 0.'''
         return cls(q, r, -q-r)
     
-    ################################ Convert between coordinate systems ################################
+    ################################ Convert to other coordinate systems ################################
     def to_cartesian(self, flat_top: bool = True) -> CartCoord:
         '''Convert hexagonal position to cartesian coordinates.'''
         return CartCoord.from_hex(self, flat_top=flat_top)
@@ -150,7 +125,8 @@ class HexCoord:
         allowed_pos: typing.Optional[set[typing.Self]] = None, 
         max_dist: typing.Optional[int] = None
     ) -> list[typing.Self]:
-        '''Compute the A-star algorithm on a hex grid.'''
+        '''Find a shortest path between this point and another. Positions should be one unit apart..'''
+        allowed_pos = set(allowed_pos) if allowed_pos is not None else None
 
         open_set: list[typing.Self] = [self]
         came_from: dict[typing.Self, typing.Self] = {}
@@ -189,129 +165,6 @@ class HexCoord:
         raise NoPathFound.from_src_and_dest(self, goal)
 
 
-
-    ################################ Depricated Pathfinding ################################
-
-    def pathfind_dfs(self, target: typing.Self, useset: typing.Set[typing.Self] = None, 
-            max_dist: int = None, verbose: bool = False) -> typing.List[typing.Self]:
-        '''Heuristic-based pathfinder. May not be shortest path.'''
-        
-        if max_dist is None:
-            max_dist = 1e9 # real big
-        
-        if self.dist(target) > max_dist:
-            raise ValueError(f'Target {self}->{target} (dist={self.dist(target)}) is outside maximum distance of {max_dist}.')
-
-        useset = set(useset)
-        visited = set([self])
-        current_path: typing.List[self.__class__] = [self]
-
-        finished = False
-        while not finished:
-            if verbose: print(f'status: {current_path}, {visited}')
-            found_next = False
-            for neighbor in current_path[-1].sorted_neighbors(target):
-                if neighbor == target:
-                    if verbose: print(f'found target {target}.')
-                    current_path.append(neighbor)
-                    found_next = True
-                    finished = True
-                    break
-                    #return current_path + [neighbor]
-                elif neighbor in useset and neighbor not in visited and self.dist(neighbor) <= max_dist:
-                    current_path.append(neighbor)
-                    visited.add(neighbor)
-                    found_next = True
-                    break
-            
-            # if none of these options are valid
-            if not finished and not found_next:
-                if verbose: print(f'reached dead end at {current_path[-1]}.')
-                visited.add(neighbor)
-                current_path.pop()
-
-            if not len(current_path):
-                return None
-
-            if verbose: print('--------------------------------\n')
-            
-        return current_path
-
-
-    def shortest_path_length(self, target: typing.Self, avoidset: set) -> int:
-        '''Calculate number of steps required to reach target.'''
-        if target in avoidset:
-            raise TargetInAvoidSet(f'Target {target} was found in avoidset.')
-        
-        ct = 0
-        visited = set([self])
-        while True:
-            fringe = self.fringe(visited, 1) - avoidset
-            ct += 1
-            if target in fringe:
-                #ct += 1
-                return ct
-            elif not len(fringe):
-                return None
-            else:
-                visited |= fringe
-    
-    def fringe(self, others: typing.Set[typing.Self], dist: int = 1) -> typing.Set[typing.Self]:
-        '''Get positions on the fringe of the provided nodes.'''
-        others = others | set([self])
-        fringe = set()
-        for pos in others:
-            fringe |= pos.neighbors(dist)
-        return fringe - others
-
-    def pathfind_dfs_avoid(self, target: typing.Self, avoidset: set = None, max_dist: int = None, verbose: bool = False) -> typing.List[typing.Self]:
-        '''Heuristic-based pathfinder. May not be shortest path.'''
-        if target in avoidset:
-            raise TargetInAvoidSet(f'Target {target} was found in avoidset.')
-        
-        if max_dist is None:
-            max_dist = 1e9 # real big
-        
-        if self.dist(target) > max_dist:
-            raise ValueError(f'Target {self}->{target} (dist={self.dist(target)}) is outside maximum distance of {max_dist}.')
-
-        avoidset = set(avoidset)
-        visited = set([self])
-        current_path: typing.List[self.__class__] = [self]
-
-        finished = False
-        while not finished:
-            if verbose: print(f'status: {current_path}, {visited}')
-            found_next = False
-            for neighbor in current_path[-1].sorted_neighbors(target):
-                if neighbor == target:
-                    if verbose: print(f'found target {target}.')
-                    current_path.append(neighbor)
-                    found_next = True
-                    finished = True
-                    break
-                    #return current_path + [neighbor]
-                elif neighbor not in avoidset and neighbor not in visited and self.dist(neighbor) <= max_dist:
-                    current_path.append(neighbor)
-                    visited.add(neighbor)
-                    found_next = True
-                    break
-            
-            # if none of these options are valid
-            if not finished and not found_next:
-                if verbose: print(f'reached dead end at {current_path[-1]}.')
-                visited.add(neighbor)
-                current_path.pop()
-
-            if not len(current_path):
-                return None
-
-            if verbose: print('--------------------------------\n')
-            
-        return current_path
-
-
-
 ##################################################### Cartesian #####################################################
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -336,11 +189,11 @@ class CartCoord:
         '''Create a cartesian coordinate from a hexagonal position.
         Description:
             Formulas for pointy-topped grid:
-                x_{\text{cartesian}} &= \sqrt{3} \left(q + \frac{r}{2}\right) \\
-                y_{\text{cartesian}} &= \frac{3}{2} r
+                x = √(q + r/2)
+                y = (3/2) * r
             Formulas for flat-topped grid:
-                x &= \text{size} \times \left( \dfrac{3}{2} \times q \right) \\
-                y &= \text{size} \times \left( \sqrt{3} \times \left( r + \dfrac{q}{2} \right) \right)
+                x = (3/2) * q
+                y = √3 * (r + q/2)
         '''
         if flat_top:
             return cls(
