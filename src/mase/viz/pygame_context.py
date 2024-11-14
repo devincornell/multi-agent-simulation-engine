@@ -1,3 +1,4 @@
+from __future__ import annotations
 import sys
 import pygame
 import typing
@@ -7,27 +8,47 @@ from pathlib import Path
 from ..types import Width, Height, XPixelCoord, YPixelCoord, ColorRGB
 
 
+
 @dataclasses.dataclass
 class PyGameDisplayIterator:
     '''Event loop iterator. Flips at the start of every iteration.'''
     screen: pygame.Surface
     frame_limit: int
+    clock: pygame.time.Clock
+    event_callbacks: dict[pygame.event.EventType, typing.Callable]
     ct: int = 0
-    clock: pygame.time.Clock = dataclasses.field(default_factory=pygame.time.Clock)
+
+    @classmethod
+    def from_context(
+        cls,
+        ctx: PyGameCtx,
+        frame_limit: int,
+        event_callbacks: dict[pygame.event.EventType, typing.Callable[[pygame.event.Event], None]],
+    ) -> PyGameDisplayIterator:
+        '''Create a display iterator from a context.'''
+
+        # allow any event call backs, use 
+        use_event_callbacks = {**{pygame.QUIT: cls.default_quit_event}, **event_callbacks}
+
+        return cls(
+            screen=ctx.screen, 
+            frame_limit=frame_limit,
+            clock = pygame.time.Clock(),
+            event_callbacks=use_event_callbacks,
+        )
 
     def __iter__(self):
+        self.ct = 0
         return self
 
-    def __next__(self):
+    def __next__(self) -> tuple[int, list[pygame.event.Event]]:
         '''Flip the display and handle quit events.'''
 
         # handle quit event
         events = list()
         for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                #sys.exit()
-                raise StopIteration
+            if event.type in self.event_callbacks:
+                self.event_callbacks[event.type](event)
             else:
                 events.append(event)
         
@@ -36,6 +57,13 @@ class PyGameDisplayIterator:
 
         self.ct += 1
         return self.ct, events
+    
+    @classmethod
+    def default_quit_event(cls, event: pygame.event.Event) -> None:
+        '''Default quit event callback.'''
+        pygame.quit()
+        #sys.exit()
+        raise StopIteration
 
 
 
@@ -55,9 +83,17 @@ class PyGameCtx:
     def __exit__(self, *args):
         pygame.quit()
 
-    def display_iter(self, frame_limit: int = 30) -> PyGameDisplayIterator:
+    def display_iter(
+        self, 
+        frame_limit: int = 30,
+        event_callbacks: dict[pygame.event.EventType, typing.Callable[[pygame.event.Event], None]] | None = None,                 
+    ) -> PyGameDisplayIterator:
         '''Expose main event loop iterator. Cals pygame.display.flip() after each iteration.'''
-        return PyGameDisplayIterator(screen=self.screen, frame_limit=frame_limit)
+        return PyGameDisplayIterator.from_context(
+            ctx=self, 
+            frame_limit=frame_limit,
+            event_callbacks=event_callbacks or dict(),
+        )
     
     ################################ Useful Points ################################
     def center_point(self) -> tuple[XPixelCoord, YPixelCoord]:
