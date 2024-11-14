@@ -10,63 +10,99 @@ sys.path.append('../src')
 import mase
 
 
+def event_factory(
+    viz: mase.HexMapVizualizer, 
+    ctx: mase.PyGameCtx,
+    available: set[mase.HexCoord],
+    region: list[mase.HexCoord],
+    red_withsword: pygame.Surface,
+) -> dict[str, typing.Callable[[pygame.event.Event], None]]:
+    '''Create a dictionary of event call backs.'''
+    def handle_mouse_click(event, key: str = 'character', path_key_base: str = 'path'):
+        click_pos = pygame.mouse.get_pos()
+        pos = viz.scaler.px_to_hex(click_pos).closest(region)
+        print('clicked:', pos)
+        if pos in available:
+            if key in viz[pos]:
+                del viz[pos][key] # remove if exists
+            else:
+                #viz[pos][key] = red_withsword # add if does not
+                viz[pos].insert_scale_surface(key, red_withsword, do_scale=True)
 
+            path_key = (path_key_base, pos)
+            if path_key in viz.draw_funcs:
+                del viz.draw_funcs[path_key]
+            else:
+                try:    
+                    path = mase.HexCoord.origin().a_star(pos, available)
+                    points = [viz[p].center for p in path]
+                    def draw_path_func(ctx: mase.PyGameCtx):
+                        ctx.draw_path(
+                            points=points,
+                            color=pygame.Color('red'), 
+                            width=3, 
+                            closed=False
+                        )
+                    viz.draw_funcs[path_key] = draw_path_func
+                except (mase.NoPathFound, mase.SourceIsSameAsDest):
+                    pass
 
+    return {
+        pygame.MOUSEBUTTONDOWN: handle_mouse_click,
+    }
 
 
 def main():
     region = [(o := mase.HexCoord.origin())] + list(o.region(5))
-    #positions = origin.region(3)
-    scaler = mase.HexGridScaler.from_points((800, 800), region)
-    viz = mase.HexMapVizualizer.from_points(scaler, region)
-    #for pos in positions:
-    #    print(pos, viz.coord_to_px(pos))
-    print(scaler)
-    #print(origin.coords_xy())
-    #print(viz.coord_to_px(origin))
-    #for coord in list(region)[:3]:
-    #    print(coord, viz.coord_to_px(coord), viz.px_to_coord(viz.coord_to_px(coord)))
-    #exit()
-    with mase.PyGameCtx(size=scaler.screen_size, title='Hexagonal Grid Game') as ctx:
-        
-        red_nosword = ctx.load_image('../data/sprites/redknight_nosword.png', size=scaler.hex_background_size())
-        red_withsword = ctx.load_image('../data/sprites/redknight_withsword.png', size=scaler.hex_background_size())
-        bg_image = ctx.load_image('../data/hex_bg/rock_hexagonal_noborder.png', size=scaler.hex_background_size())
+    blocked = set([
+        mase.HexCoord(0, 1, -1),
+        mase.HexCoord(1, 0, -1),
+        mase.HexCoord(1, -1, 0),
+        mase.HexCoord(0, -1, 1),
+    ])
+    available = set(region) - blocked
 
-        viz.insert_image_all('bg', bg_image, do_scale=False)
+    # make visualizer and scaler
+    viz = mase.HexMapVizualizer.from_points((800, 800), region)
 
-        def handle_mouse_click(event, key: str = 'character'):
-            click_pos = pygame.mouse.get_pos()
-            pos = scaler.px_to_hex(click_pos).closest(region)
-            if key in viz[pos]:
-                del viz[pos][key] # remove if exists
-            else:
-                viz[pos][key] = red_withsword # add if does not
+    red_nosword = pygame.image.load('../data/sprites/redknight_nosword.png')
+    red_withsword = pygame.image.load('../data/sprites/redknight_withsword.png')
+    bg_image = pygame.image.load('../data/hex_bg/rock_hexagonal_noborder.png')
 
-            
-        
-        display = ctx.display_iter(
+    for pos, loc in viz.locations.items():
+        if pos in available:
+            #print(loc.size)
+            loc.insert_scale_surface('bg', bg_image, do_scale=True)
+
+
+    with mase.PyGameCtx(size=viz.scaler.screen_size, title='Hexagonal Grid Game') as ctx:
+        display_loop = ctx.display_iter(
             frame_limit=30,
-            event_callbacks={
-                pygame.MOUSEBUTTONDOWN: handle_mouse_click,
-            },
+            event_callbacks=event_factory(
+                viz=viz, 
+                ctx=ctx, 
+                available=available, 
+                region=region,
+                red_withsword=red_withsword,
+            ),
         )
 
-        for i, events in display:
+        for i, events in display_loop:
             
             viz.draw(
                 ctx = ctx, 
-                hex_outline=pygame.Color('green'),
+                hex_outline_color=pygame.Color('green'),
+                bg=pygame.Color('black'),
             )
             
             # additional drawing
-            path = mase.HexCoord.origin().a_star(mase.HexCoord(3, 2, -5), set(region))
-            ctx.draw_path(
-                points=[viz[p].center for p in path],
-                color=pygame.Color('red'), 
-                width=3, 
-                closed=False
-            )
+            #path = mase.HexCoord.origin().a_star(mase.HexCoord(3, 2, -5), set(region))
+            #ctx.draw_path(
+            #    points=[viz[p].center for p in path],
+            #    color=pygame.Color('red'), 
+            #    width=3, 
+            #    closed=False
+            #)
 
             #for pos in region:
             #    ctx.blit_image(bg_image, scaler.coord_to_px(pos))

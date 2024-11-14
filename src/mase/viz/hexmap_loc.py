@@ -49,12 +49,11 @@ class HexMapLoc:
         surface: pygame.Surface, 
         do_scale: bool = False,
         keep_ratio: bool = True,
-        scale_func: typing.Callable[[pygame.Surface, tuple[Width, Height]], pygame.Surface] = pygame.transform.smoothscale,
         **scale_kwargs
     ) -> None:
         '''Insert a surface into the dictionary.'''
         if do_scale:
-            surface = PyGameCtx.scale_image(surface, self.size, keep_ratio, scale_func=scale_func, **scale_kwargs)
+            surface = PyGameCtx.scale_image(surface, self.size, keep_ratio, **scale_kwargs)
         self.surfaces[key] = surface
 
     def get_surfaces(self) -> dict[str, pygame.Surface]:

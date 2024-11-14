@@ -21,18 +21,26 @@ from .pygame_context import PyGameCtx
 class HexMapVizualizer:
     '''Visualize objects on a hexagonal map.'''
     locations: dict[HexCoord, HexMapLoc]
-    #scaler: HexGridScaler
+    draw_funcs: dict[str, typing.Callable[[PyGameCtx], None]]
+    scaler: HexGridScaler
 
     @classmethod
-    def from_points(cls, scaler: HexGridScaler, points: list[HexCoord]):
+    def from_points(cls, 
+        screen_size: tuple[Width, Height],
+        points: list[HexCoord],
+        draw_funcs: dict[str, typing.Callable[[PyGameCtx], None]] | None = None,
+    ):
         '''Create a hex map from a list of points.'''
+        scaler = HexGridScaler.from_points(screen_size, points)
         return cls(
             locations={pos: HexMapLoc.from_hex_coord(scaler, pos) for pos in points},
+            draw_funcs=draw_funcs or dict(),
+            scaler=scaler,
         )
 
     def draw(self, 
         ctx: PyGameCtx, 
-        hex_outline: pygame.Color | None = None,
+        hex_outline_color: pygame.Color | None = None,
         bg: pygame.Color | None = None,
     ) -> None:
         '''Draw the hexagonal map, etc.'''
@@ -40,7 +48,10 @@ class HexMapVizualizer:
             ctx.screen.fill(pygame.Color('white'))
 
         for loc in self.locations.values():
-            loc.draw(ctx, hex_outline=hex_outline)
+            loc.draw(ctx, hex_outline=hex_outline_color)
+
+        for draw_func in self.draw_funcs.values():
+            draw_func(ctx)
 
     ################################ updating images ################################
     def insert_image_all(self, 

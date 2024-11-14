@@ -1,25 +1,41 @@
-
+from __future__ import annotations
 import typing
 
 if typing.TYPE_CHECKING:
-    from mase.hexmap.hexpos import HexPos
+    #from mase.hexmap.hexpos import HexPos
+    from .coords import BaseCoord
 
+class NoPathFound(Exception):
+    @classmethod
+    def from_src_and_dest(cls, src: typing.Self, dest: typing.Self) -> typing.Self:
+        o = cls(f'No path found from {src} to {dest}.')
+        o.src = src
+        o.dest = dest
+        return o
+
+class SourceIsSameAsDest(Exception):
+    @classmethod
+    def from_src(cls, src: typing.Self) -> typing.Self:
+        o = cls(f'No path found from {src}.')
+        o.src = src
+        return o
 
 
 def a_star(
-    start: HexPos, 
-    goal: HexPos, 
-    allowed_pos: typing.Optional[set[HexPos]] = None, 
+    start: BaseCoord,
+    goal: BaseCoord, 
+    allowed_pos: typing.Optional[set[BaseCoord]] = None, 
     max_dist: typing.Optional[int] = None
-) -> list[HexPos]:
-    '''Compute the A-star algorithm on a hex grid.'''
-    if allowed_pos is None:
-        allowed_pos = set()
+) -> list[BaseCoord]:
+    '''Find a shortest path between this point and another. Positions should be one unit apart..'''
+    if start == goal:
+        raise SourceIsSameAsDest.from_src(start)
+    allowed_pos = set(allowed_pos) if allowed_pos is not None else None
 
-    open_set = [start]
-    came_from = {}
-    g_score = {start: 0}
-    f_score = {start: start.dist(goal)}
+    open_set: list[BaseCoord] = [start]
+    came_from: dict[BaseCoord, BaseCoord] = {}
+    g_score: dict[BaseCoord,int] = {start: 0}
+    f_score: dict[BaseCoord, float] = {start: start.distance(goal)}
 
     while open_set:
         current = min(open_set, key=lambda pos: f_score.get(pos, float('inf')))
@@ -35,7 +51,7 @@ def a_star(
             return path
 
         for neighbor in current.neighbors():
-            if neighbor not in allowed_pos:
+            if allowed_pos is not None and neighbor not in allowed_pos:
                 continue
 
             tentative_g_score = g_score[current] + 1
@@ -46,8 +62,8 @@ def a_star(
             if neighbor not in g_score or tentative_g_score < g_score[neighbor]:
                 came_from[neighbor] = current
                 g_score[neighbor] = tentative_g_score
-                f_score[neighbor] = tentative_g_score + neighbor.dist(goal)
+                f_score[neighbor] = tentative_g_score + neighbor.distance(goal)
                 if neighbor not in open_set:
                     open_set.append(neighbor)
 
-    return []
+    raise NoPathFound.from_src_and_dest(self, goal)

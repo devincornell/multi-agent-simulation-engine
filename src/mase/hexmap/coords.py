@@ -7,13 +7,19 @@ import math
 import math
 import dataclasses
 
-#from .position import Position
-#from .algorithms import a_star
+from .algorithms import a_star
 
-#from .cart_coord import CartCoord, CartUnit
-#from .rad_coord import RadialCoord
-
-
+##################################################### Hexagonal #####################################################
+class BaseCoord:
+    '''Base class for hexagonal, cartesian, and radial coordinates.
+    Description: has neighbors and distance methods. Make this a protocol
+        someday.
+    '''
+    def neighbors(self) -> list[typing.Self]:
+        raise NotImplementedError
+    
+    def distance(self, other: typing.Self) -> float:
+        raise NotImplementedError
 
 
 ##################################################### Hexagonal #####################################################
@@ -23,15 +29,8 @@ HEX_DIRECTIONS = [
     (-1, 1, 0), (-1, 0, 1), (0, -1, 1),
 ]
 
-
-class NoPathFound(Exception):
-    @classmethod
-    def from_src_and_dest(cls, src: typing.Self, dest: typing.Self) -> typing.Self:
-        return cls(f'No path found from {src} to {dest}.')
-
-
 @dataclasses.dataclass(frozen=True, slots=True)
-class HexCoord:
+class HexCoord(BaseCoord):
     '''Cubic hexagonal position object. Supports floats or ints.'''
     q: float
     r: float
@@ -128,49 +127,12 @@ class HexCoord:
         max_dist: typing.Optional[int] = None
     ) -> list[typing.Self]:
         '''Find a shortest path between this point and another. Positions should be one unit apart..'''
-        allowed_pos = set(allowed_pos) if allowed_pos is not None else None
-
-        open_set: list[typing.Self] = [self]
-        came_from: dict[typing.Self, typing.Self] = {}
-        g_score: dict[typing.Self,int] = {self: 0}
-        f_score: dict[typing.Self, float] = {self: self.distance(goal)}
-
-        while open_set:
-            current = min(open_set, key=lambda pos: f_score.get(pos, float('inf')))
-            open_set.remove(current)
-
-            if current == goal:
-                path = []
-                while current in came_from:
-                    path.append(current)
-                    current = came_from[current]
-                path.append(self)
-                path.reverse()
-                return path
-
-            for neighbor in current.neighbors():
-                if allowed_pos is not None and neighbor not in allowed_pos:
-                    continue
-
-                tentative_g_score = g_score[current] + 1
-
-                if max_dist is not None and tentative_g_score > max_dist:
-                    continue
-
-                if neighbor not in g_score or tentative_g_score < g_score[neighbor]:
-                    came_from[neighbor] = current
-                    g_score[neighbor] = tentative_g_score
-                    f_score[neighbor] = tentative_g_score + neighbor.distance(goal)
-                    if neighbor not in open_set:
-                        open_set.append(neighbor)
-
-        raise NoPathFound.from_src_and_dest(self, goal)
-
+        return a_star(self, goal, allowed_pos=allowed_pos, max_dist=max_dist)
 
 ##################################################### Cartesian #####################################################
 
 @dataclasses.dataclass(frozen=True, slots=True)
-class CartCoord:
+class CartCoord(BaseCoord):
     '''Hexagonal position object.'''
     x: float
     y: float
@@ -229,7 +191,7 @@ class CartCoord:
 
 ##################################################### Radial #####################################################
 @dataclasses.dataclass(frozen=True, slots=True)
-class RadialCoord:
+class RadialCoord(BaseCoord):
     '''Hexagonal position object.'''
     rho: float
     theta: float
