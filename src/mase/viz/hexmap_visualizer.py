@@ -34,11 +34,39 @@ class HexMapVizualizer:
         for loc in self.locations.values():
             loc.draw(ctx, hex_outline=hex_outline)
 
-    def update_images(self, image_coords: dict[HexCoord, list[pygame.Surface]], do_scale: bool = False):
+    ################################ updating images ################################
+
+    def append_all_images(self, images: list[pygame.Surface], do_scale: bool = False) -> None:
+        '''Add an image to the end of the list.'''
+        for loc in self.locations.values():
+            loc.append_images(images, do_scale=do_scale)
+
+    def append_images(self, image_coords: dict[HexCoord, list[pygame.Surface]], do_scale: bool = False) -> None:
+        '''Add an image to the end of the list.'''
+        for pos, imgs in image_coords.items():
+            self.locations[pos].append_images(imgs, do_scale=do_scale)
+
+    def prepend_all(self, images: list[pygame.Surface], do_scale: bool = False) -> None:
+        '''Add an image to the front of the list.'''
+        for loc in self.locations.values():
+            loc.prepend_images(images, do_scale=do_scale)
+    
+    def prepend_images(self, image_coords: dict[HexCoord, list[pygame.Surface]], do_scale: bool = False) -> None:
+        '''Add an image to the front of the list.'''
+        for pos, imgs in image_coords.items():
+            self.locations[pos].prepend_images(imgs, do_scale=do_scale)
+    
+    def update_all_images(self, images: list[pygame.Surface], do_scale: bool = False) -> None:
+        '''Set the images to be drawn.'''
+        for loc in self.locations.values():
+            loc.set_images(images, do_scale=do_scale)
+
+    def update_images(self, image_coords: dict[HexCoord, list[pygame.Surface]], do_scale: bool = False) -> None:
         '''Set the images to be drawn.'''
         for pos, imgs in image_coords.items():
             self.locations[pos].set_images(imgs, do_scale=do_scale)
 
+    ################################ dunder ################################
     def __getitem__(self, key: HexCoord) -> HexMapLoc:
         return self.locations[key]
 
