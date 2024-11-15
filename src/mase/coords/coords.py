@@ -8,19 +8,7 @@ import math
 import dataclasses
 
 from .algorithms import a_star
-
-##################################################### Hexagonal #####################################################
-class BaseCoord:
-    '''Base class for hexagonal, cartesian, and radial coordinates.
-    Description: has neighbors and distance methods. Make this a protocol
-        someday.
-    '''
-    def neighbors(self) -> list[typing.Self]:
-        raise NotImplementedError
-    
-    def distance(self, other: typing.Self) -> float:
-        raise NotImplementedError
-
+from .base_coord import BaseCoord
 
 ##################################################### Hexagonal #####################################################
 SQRT_THREE = math.sqrt(3)

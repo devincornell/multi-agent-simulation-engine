@@ -1,9 +1,7 @@
 from __future__ import annotations
 import typing
 
-if typing.TYPE_CHECKING:
-    #from mase.hexmap.hexpos import HexPos
-    from .coords import BaseCoord
+from .base_coord import BaseCoord
 
 class NoPathFound(Exception):
     @classmethod
