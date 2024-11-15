@@ -66,4 +66,4 @@ def a_star(
                 if neighbor not in open_set:
                     open_set.append(neighbor)
 
-    raise NoPathFound.from_src_and_dest(self, goal)
+    raise NoPathFound.from_src_and_dest(start, goal)
