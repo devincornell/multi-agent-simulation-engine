@@ -68,6 +68,10 @@ class AgentState:
         return self.hp > 0
 
     ############################## get stats ##############################
+    def attack_distance(self) -> int:
+        '''Get the attack distance of the agent.'''
+        return 1
+    
     def attack_power(self) -> float:
         '''Get the attack power of the agent.'''
         return self.level / 3
@@ -135,6 +139,12 @@ class AgentNotOnMap(Exception):
     pass
 class NoRouteToTarget(Exception):
     pass
+class CantAttackSameTeam(Exception):
+    pass
+class TargetTooFarAwayForAttack(Exception):
+    pass
+class AgentIsDead(Exception):
+    pass
 
 @dataclasses.dataclass
 class GameState:
@@ -187,32 +197,16 @@ class TeamCtrlr:
     ############################## available moves ##############################
     def attack(self, agent_id: AgentID, target_id: AgentID) -> int:
         '''Have one agent attack another.'''
-        try:
-            agent = self.agents[agent_id]
-        except KeyError:
-            raise AgentDoesNotExist()
+        agent, loc = self.get_agent_state(agent_id, require_sameteam=True, require_alive=True)
+        target_agent, target_loc = self.get_agent_state(target_id, require_alive=True)
         
-        try:
-            target = self.agents[target_id]
-        except KeyError:
-            raise TargetAgentDoesNotExist()
+        if target_agent.team == self.team_id:
+            raise CantAttackSameTeam()
         
-        try:
-            agent_pos = self.map.get_coord(agent_id)
-        except mase.ObjectIsNotOnMap:
-            raise AgentNotOnMap()
+        if loc.pos.distance(target_loc.pos) > agent.attack_distance():
+            raise TargetTooFarAwayForAttack()
         
-        try:
-            target_pos = self.map.get_coord(target_id)
-        except mase.ObjectIsNotOnMap:
-            raise AgentNotOnMap()
 
-        if agent_id not in self.agents:
-            raise AgentDoesNotExist()
-        if target_id not in self.agents:
-            raise AgentDoesNotExist()
-        if agent_id not in self.remaining_moves:
-            raise AgentDoesNotExist()
 
     def kill_agent(self, agent_id: AgentID) -> None:
         '''Kill an agent.
@@ -291,7 +285,11 @@ class TeamCtrlr:
 
         return loc
     
-    def get_agent_state(self, agent_id: AgentID) -> tuple[AgentState, LocState]:
+    def get_agent_state(self, 
+        agent_id: AgentID, 
+        require_sameteam: bool = False,
+        require_alive: bool = True,
+    ) -> tuple[AgentState, LocState]:
         '''Get the agent and its location, checking to make sure everything is good.'''
         try:
             agent = self.agents[agent_id]
@@ -308,21 +306,32 @@ class TeamCtrlr:
         except KeyError:
             raise LocationDoesNotExist()
         
+        if require_sameteam:
+            if agent.team != self.team_id:
+                raise AgentDoesNotBelongToTeam()
+            
+        if require_alive:
+            if not agent.is_alive():
+                raise AgentIsDead()
+
         return agent, loc
 
         
     ############################## get agents from this and other teams ##############################
-    def other_team_agents(self) -> set[AgentID]:
-        '''Get the agents of the other teams.'''
-        return {aid for aid in self.game.agents.keys() if self.game.agents[aid].team != self.team_id}
-    
-    def this_team_agents(self) -> set[AgentID]:
+    def get_other_team_agents(self, other_team_id: TeamID|None = None, require_alive: bool = True) -> set[AgentID]:
         '''Get the agents of this team.'''
-        return self.get_team_agents(self.team_id)
+        if other_team_id is None:
+            return self.get_agents(lambda agent: agent.team != self.team_id and (not require_alive or agent.is_alive()))
+        else:
+            return self.get_agents(lambda agent: agent.team == other_team_id and (not require_alive or agent.is_alive()))
     
-    def get_alive_team_agents(self, team_id: TeamID) -> set[AgentID]:
+    def get_team_agents(self, require_alive: bool = True) -> set[AgentID]:
         '''Get the agents of a team.'''
-        return {aid for aid in self.game.agents.keys() if self.game.agents[aid].team == team_id and self.game.agents[]}
+        return self.get_agents(lambda agent: agent.team == self.team_id and (not require_alive or agent.is_alive()))
+
+    def get_agents(self, filter_criteria: typing.Callable[[AgentState],bool]) -> dict[AgentID, AgentState]:
+        '''Get all agents.'''
+        return {aid: agent for aid, agent in self.game.agents.items() if filter_criteria(agent)}
 
     @property
     def agents(self) -> dict[AgentID, AgentState]:
