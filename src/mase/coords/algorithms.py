@@ -1,5 +1,6 @@
 from __future__ import annotations
 import typing
+import heapq
 
 from .base_coord import BaseCoord
 
@@ -65,3 +66,71 @@ def a_star(
                     open_set.append(neighbor)
 
     raise NoPathFound.from_src_and_dest(start, goal)
+
+
+# FROM THE LLM:
+# Example usage:
+# start = BaseCoord(...)
+# allowed_pos = {...}
+# shortest_paths = dijkstra(start, allowed_pos)
+# for goal in shortest_paths:
+#     path = reconstruct_path(start, goal, shortest_paths)
+#     print(f"Path from {start} to {goal}: {path}")
+
+def dijkstra_shortest_path(
+    start: BaseCoord,
+    allowed_pos: typing.Optional[set[BaseCoord]] = None
+) -> dict[BaseCoord, list[BaseCoord]]:
+    '''Find the shortest path from the start to all other positions.'''
+    shortest_path_tuples: dict[BaseCoord, list[BaseCoord]] = {}
+    shortest_paths = _dijkstra(start, allowed_pos)
+    for goal in shortest_paths:
+        path = _reconstruct_path(start, goal, shortest_paths)
+        shortest_path_tuples[goal] = path
+    return shortest_path_tuples
+
+def _dijkstra(
+    start: BaseCoord,
+    allowed_pos: typing.Optional[set[BaseCoord]] = None
+) -> dict[BaseCoord, tuple[float, typing.Optional[BaseCoord]]]:
+    '''Find the shortest path from the start to all other positions.'''
+    
+    allowed_pos = set(allowed_pos) if allowed_pos is not None else None
+    distances: dict[BaseCoord, float] = {start: 0}
+    previous_nodes: dict[BaseCoord, typing.Optional[BaseCoord]] = {start: None}
+    priority_queue: list[tuple[float, int, BaseCoord]] = [(0, 0, start)]
+    counter = 0
+
+    while priority_queue:
+        current_distance, _, current_node = heapq.heappop(priority_queue)
+
+        if allowed_pos is not None and current_node not in allowed_pos:
+            continue
+
+        for neighbor in current_node.neighbors():
+            if allowed_pos is not None and neighbor not in allowed_pos:
+                continue
+
+            distance = current_distance + 1  # Assuming each edge has a weight of 1
+            if distance < distances.get(neighbor, float('inf')):
+                distances[neighbor] = distance
+                previous_nodes[neighbor] = current_node
+                heapq.heappush(priority_queue, (distance, counter, neighbor))
+                counter += 1
+
+    return {node: (dist, previous_nodes[node]) for node, dist in distances.items()}
+
+def _reconstruct_path(
+    start: BaseCoord,
+    goal: BaseCoord,
+    previous_nodes: dict[BaseCoord, typing.Optional[BaseCoord]]
+) -> list[BaseCoord]:
+    '''Reconstruct the path from start to goal using the previous_nodes dictionary.'''
+    path = []
+    current = goal
+    while current is not None:
+        path.append(current)
+        current = previous_nodes[current][1]
+    path.reverse()
+    return path if path[0] == start else []
+

@@ -25,3 +25,4 @@ from .viz import *
 
 from .types import *
 from .coords import *
+from .object_mapper import ObjectMapper, ObjectIsNotOnMap
