@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ..types import Width, Height, XPixelCoord, YPixelCoord, ColorRGB
 
-from ..hexmap import HexCoord, CartCoord, SQRT_THREE
+from ..coords import HexCoord, CartCoord, SQRT_THREE
 from .hexmap_loc import HexMapLoc
 from .hexgrid_scaler import HexGridScaler
 

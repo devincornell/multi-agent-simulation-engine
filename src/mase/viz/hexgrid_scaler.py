@@ -6,7 +6,7 @@ import dataclasses
 from pathlib import Path
 
 
-from ..hexmap import HexCoord, CartCoord, SQRT_THREE
+from ..coords import HexCoord, CartCoord, SQRT_THREE
 
 from ..types import Width, Height, XPixelCoord, YPixelCoord, ColorRGB
 
