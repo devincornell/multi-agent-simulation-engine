@@ -8,6 +8,7 @@ import math
 import dataclasses
 
 ##################################################### Hexagonal #####################################################
+@dataclasses.dataclass(frozen=True, slots=True)
 class BaseCoord:
     '''Base class for hexagonal, cartesian, and radial coordinates.
     Description: has neighbors and distance methods. Make this a protocol

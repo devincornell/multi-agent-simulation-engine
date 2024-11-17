@@ -122,7 +122,7 @@ class HexCoord(BaseCoord):
         allowed_pos: typing.Optional[set[typing.Self]] = None, 
     ) -> dict[typing.Self,list[typing.Self]]:
         '''Find a shortest path between this point and another. Positions should be one unit apart..'''
-        return dijkstra_shortest_path(self, allowed_pos=allowed_pos)
+        return dijkstra_shortest_path(start=self, allowed_pos=allowed_pos)
 
 
 ##################################################### Cartesian #####################################################
@@ -196,8 +196,8 @@ class RadialCoord(BaseCoord):
         '''Create a radial coordinate from a hexagonal position.
         Description: 
             These are the formulas:
-                \rho = \sqrt{3(q^2 + qr + r^2)}
-                \theta = \arctan\left(\frac{\sqrt{3}(q + 2r)}{3q}\right)
+                ⍴ = √(q^2 + qr + r^2)
+                θ = arctan(√3(q + 2r) / 3q)
         '''
         return cls(
             rho = math.sqrt(3 * (hexpos.q**2 + hexpos.r*hexpos.q + hexpos.r**2)),
