@@ -7,7 +7,7 @@ import math
 import math
 import dataclasses
 
-from .algorithms import a_star, dijkstra_shortest_path
+from .algorithms import a_star, dijkstra
 from .base_coord import BaseCoord
 
 ##################################################### Hexagonal #####################################################
@@ -117,12 +117,13 @@ class HexCoord(BaseCoord):
         '''Find a shortest path between this point and another. Positions should be one unit apart..'''
         return a_star(self, goal, allowed_pos=allowed_pos, max_dist=max_dist)
 
-    def dikstra_shortest_path(
+    def dijkstra(
         self, 
         allowed_pos: typing.Optional[set[typing.Self]] = None, 
+        max_dist: typing.Optional[int] = None,
     ) -> dict[typing.Self,list[typing.Self]]:
         '''Find a shortest path between this point and another. Positions should be one unit apart..'''
-        return dijkstra_shortest_path(start=self, allowed_pos=allowed_pos)
+        return dijkstra(start=self, allowed_pos=allowed_pos, max_dist=max_dist)
 
 
 ##################################################### Cartesian #####################################################

@@ -83,13 +83,14 @@ def a_star(
 
 
 
-def dijkstra_shortest_path(
+def dijkstra(
     start: BaseCoord,
-    allowed_pos: typing.Optional[set[BaseCoord]] = None
+    allowed_pos: typing.Optional[set[BaseCoord]] = None,
+    max_dist: typing.Optional[int] = None,
 ) -> dict[BaseCoord, list[BaseCoord]]:
     '''Find the shortest path from the start to all other positions.'''
     shortest_path_tuples: dict[BaseCoord, list[BaseCoord]] = {}
-    shortest_paths = _dijkstra(start=start, allowed_pos=allowed_pos)
+    shortest_paths = _dijkstra(start=start, allowed_pos=allowed_pos, max_dist=max_dist)
     for goal in shortest_paths:
         path = _reconstruct_path(start=start, goal=goal, previous_nodes=shortest_paths)
         shortest_path_tuples[goal] = path

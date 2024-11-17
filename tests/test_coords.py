@@ -48,7 +48,7 @@ def test_algorithms(verbose=False):
         main_iter = tqdm.tqdm(main_iter, ncols=100)
 
     for i in main_iter:
-        all_dists = region_list[i].dikstra_shortest_path(region)
+        all_dists = region_list[i].dijkstra(region)
 
         # starting path should be in returned distances
         assert(region_list[i] in region)
