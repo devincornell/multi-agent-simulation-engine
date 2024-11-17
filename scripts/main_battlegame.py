@@ -1,5 +1,13 @@
 
 import battlegame
+import random
+
+
+def ai_red(ctrlr: battlegame.TeamCtrlr):
+    for aid, agent in ctrlr.get_team_agents().items():
+        possible_moves = ctrlr.valid_move_set(aid)
+        ctrlr.move_agent(aid, possible_moves[0])
+
 
 
 def main():
@@ -8,10 +16,12 @@ def main():
         map_size=10,
     )
 
-    for i, ctrlr in game.take_turns():
-        print(ctrlr)
-        break
+    team_ai = {0: ai_red, 1: ai_red}
 
+
+    for ctrlr in game.take_turns():
+        ai = team_ai[ctrlr.team_id]
+        ai(ctrlr)
 
 
 if __name__ == '__main__':
