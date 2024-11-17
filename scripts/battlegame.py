@@ -43,11 +43,11 @@ class AgentState:
     '''State of an agent.'''
     id: AgentID
     team: TeamID
-    level: int
+    level: int = 1
     hp: int = 100
 
     
-    ############################## change agent stats ##############################
+    ############################## modify agent stats ##############################
     def die(self) -> None:
         self.hp = 0
 
@@ -61,13 +61,22 @@ class AgentState:
         '''Level up the agent.'''
         old_hp_percent = self.hp / self.max_hp()
         self.level += 1
+        self.hp = self.max_hp() * old_hp_percent
 
     ############################## get status of agent ##############################
     def is_alive(self) -> bool:
         '''Check if the agent is alive.'''
         return self.hp > 0
 
-    ############################## get stats ##############################
+    ############################## get stats for actions ##############################
+    def max_actions_allowed(self) -> AgentActionsRemaining:
+        '''Get the number of moves remaining for the agent.'''
+        return AgentActionsRemaining(attacks_remaining=1, moves_remaining=self.move_distance())
+
+    def move_distance(self) -> int:
+        '''Get the move distance of the agent.'''
+        return self.level
+    
     def attack_distance(self) -> int:
         '''Get the attack distance of the agent.'''
         return 1
@@ -79,10 +88,6 @@ class AgentState:
     def max_hp(self) -> int:
         '''Get the max hp of the agent.'''
         return 100 + 30 * self.level
-
-    def max_actions_allowed(self) -> AgentActionsRemaining:
-        '''Get the number of moves remaining for the agent.'''
-        return AgentActionsRemaining(attacks_remaining=1, moves_remaining=self.level)
 
 class AgentStates(dict[AgentID, AgentState]):
     '''Mapping from agent id to agent state.'''
@@ -197,8 +202,8 @@ class TeamCtrlr:
     ############################## available moves ##############################
     def attack(self, agent_id: AgentID, target_id: AgentID) -> int:
         '''Have one agent attack another.'''
-        agent, loc = self.get_agent_state(agent_id, require_sameteam=True, require_alive=True)
-        target_agent, target_loc = self.get_agent_state(target_id, require_alive=True)
+        agent, loc, agent_actions = self.get_agent_state(agent_id, require_sameteam=True, require_alive=True)
+        target_agent, target_loc, target_actions = self.get_agent_state(target_id, require_alive=True)
         
         if target_agent.team == self.team_id:
             raise CantAttackSameTeam()
@@ -206,18 +211,19 @@ class TeamCtrlr:
         if loc.pos.distance(target_loc.pos) > agent.attack_distance():
             raise TargetTooFarAwayForAttack()
         
-
+        # note that an attack action was taken and update agent state
+        agent_actions.taking_attack()
+        target_agent.receive_attack(agent.attack_power())
+        if not target_agent.is_alive():
+            self.kill_agent(target_id)
 
     def kill_agent(self, agent_id: AgentID) -> None:
         '''Kill an agent.
         Description: changes agent stats, removes agent from the map, and removes
             agent from the remaining moves.
         '''
-        agent = self.agents[agent_id]
-        agent.die()
         self.map.remove_obj(agent_id)
         del self.remaining_moves[agent_id]
-
 
     def move_agent(self, agent_id: AgentID, new_pos: mase.HexCoord):
         '''Move an agent to a new position.
@@ -225,7 +231,7 @@ class TeamCtrlr:
             agent/location states. Most of this function is game logic.
         '''
         # check agent being moved
-        agent, old_loc = self.get_agent_state(agent_id)
+        agent, old_loc, agent_actions = self.get_agent_state(agent_id)
         if agent.team != self.team_id:
             raise AgentDoesNotBelongToTeam()
         
@@ -234,12 +240,12 @@ class TeamCtrlr:
         
         if len(self.map.get_objs(new_pos)):
             raise AnotherAgentIsAtTargetLocation()
-                
+        
         move_through_set = self.get_valid_move_through_set()
 
         # check if there is a shortest path, get it if there is
         try:
-            shortest_path = old_loc.pos.a_star(new_pos, move_through_set)
+            shortest_path = old_loc.pos.a_star(new_pos, allowed_pos=move_through_set)
         except mase.NoPathFound:
             raise NoRouteToTarget(
                 f'Agent {agent_id} tried to move from '
@@ -247,18 +253,19 @@ class TeamCtrlr:
             )
 
         # change game state to reflect the move, rais exception if issue
-        self.remaining_moves[agent_id].taking_move(len(shortest_path) - 1)
+        agent_actions.taking_move(len(shortest_path) - 1)
         self.map.move_obj(agent_id, new_pos)
 
     ############################## get agents from this and other teams ##############################
-    def get_valid_move_to_set(self) -> set[mase.HexCoord]:
-        '''Get locations that player can move to.'''
-        move_coords = set()
-        for pos, loc in self.game.locations.items():
-            if not loc.blocked and not len(self.game.map.get_objs(pos)):
-                move_coords.add(pos)
-        
-        return move_coords
+    def valid_move_set(self, agent_id: AgentID) -> set[mase.HexCoord]:
+        '''Get locations that an agent can move to.'''
+        agent, loc, agent_actions = self.get_agent_state(agent_id)
+        move_through_set = self.get_valid_move_through_set()
+        shortest_paths = loc.pos.dijkstra(
+            allowed_pos=move_through_set,
+            max_dist=agent_actions.moves_remaining, 
+        )
+        return [pos for pos in shortest_paths.keys() if shortest_paths[pos] <= agent_actions.moves_remaining]
 
     def get_valid_move_through_set(self) -> set[mase.HexCoord]:
         '''Get locations that player can move through.'''
@@ -289,7 +296,7 @@ class TeamCtrlr:
         agent_id: AgentID, 
         require_sameteam: bool = False,
         require_alive: bool = True,
-    ) -> tuple[AgentState, LocState]:
+    ) -> tuple[AgentState, LocState, AgentActionsRemaining]:
         '''Get the agent and its location, checking to make sure everything is good.'''
         try:
             agent = self.agents[agent_id]
@@ -313,8 +320,10 @@ class TeamCtrlr:
         if require_alive:
             if not agent.is_alive():
                 raise AgentIsDead()
+            
+        remaining_moves = self.remaining_moves[agent_id]
 
-        return agent, loc
+        return agent, loc, remaining_moves
 
         
     ############################## get agents from this and other teams ##############################
@@ -347,6 +356,54 @@ class TeamCtrlr:
     def map(self) -> mase.ObjectMapper[AgentID, mase.HexCoord]:
         '''Get the agent locations.'''
         return self.game.map
+
+
+
+@dataclasses.dataclass
+class BattleGame:
+    game_state: GameState
+    team_list: list[TeamID]
+
+    @classmethod
+    def new(cls, num_agents: dict[TeamID, int], map_size: int):
+        '''Create a new game.'''
+        return cls(
+            game_state=GameState.new(num_agents, map_size),
+            team_list=list(num_agents.keys()),
+        )
+    
+    def __iter__(self) -> typing.Iterator[typing.Self]:
+        return self
+    
+    def take_turns(self) -> None:
+        '''Take turns for all teams.'''
+        return TurnTracker(
+            game_state=self.game_state, 
+            teams=list(self.team_list), 
+        )
+
+
+@dataclasses.dataclass
+class TurnTracker:
+    game_state: GameState
+    teams: list[TeamID]
+    current_turn: int = 0
+
+    def __iter__(self) -> typing.Iterator[TeamCtrlr]:
+        return self
+
+    def __next__(self) -> TeamCtrlr:
+        '''Go to the next turn.'''
+        ctrlr = self.game_state.get_ctrlr(self.get_current_team_id())
+        self.current_turn += 1
+        return ctrlr
+    
+    def get_current_team_id(self) -> TeamID:
+        '''Get the current team id.'''
+        return self.teams[(self.current_turn + 1) % len(self.teams)]
+        
+
+
 
 
 def main():
