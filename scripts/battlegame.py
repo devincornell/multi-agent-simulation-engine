@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import collections
 import time
 import math
 import pygame
@@ -7,6 +7,8 @@ import typing
 import dataclasses
 import random
 from pathlib import Path
+
+import tqdm
 
 import sys
 sys.path.append('../src')
@@ -166,7 +168,8 @@ class TargetLocationIsBlocked(GameException):
     pass
 class TargetIsTooFar(GameException):
     pass
-
+class TargetIsAlreadyDead(GameException):
+    pass
 
 @dataclasses.dataclass
 class GameState:
@@ -220,7 +223,11 @@ class GameState:
             raise CantAttackSelf()
 
         agent, loc = self.get_agent_and_loc(agent_id)
-        target_agent, target_loc = self.get_agent_and_loc(target_id)
+
+        try:
+            target_agent, target_loc = self.get_agent_and_loc(target_id)
+        except AgentIsDead:
+            raise TargetIsAlreadyDead()
 
         if agent.team == target_agent.team:
             raise CantAttackSameTeam()
@@ -279,7 +286,7 @@ class GameState:
                 f'{old_loc.pos} to {new_pos}, but there is no path.'
             )
         
-        print(shortest_path)
+        #print(shortest_path)
         if max_dist is not None and (len(shortest_path)-1) > max_dist:
             raise TargetIsTooFar()
         
@@ -360,6 +367,14 @@ class GameState:
         
 
         return agent, loc
+    
+    def get_team_counts(self) -> dict[TeamID, int]:
+        '''Get the number of agents on each team.'''
+        cts = collections.Counter()
+        for agent in self.agents.values():
+            if agent.is_alive():
+                cts[agent.team] += 1
+        return dict(cts)
 
 
 @dataclasses.dataclass(repr=False)
@@ -388,12 +403,12 @@ class AgentCtrlr:
     def identify_possible_attack_targets(self) -> list[AgentID]:
         '''Get the possible attacks for the agent.'''
         possible_attacks = list()
-        for other_id in self.ctrlr.game.agents:
-            if other_id != self.id:
+        for other_id, other in self.ctrlr.game.agents.items():
+            if other_id != self.id and other.is_alive():
                 try:
                     agent, target, attack_power = self.ctrlr.game.plan_attack(self.id, other_id)
                     possible_attacks.append(other_id)
-                except (CantAttackSameTeam, TargetTooFarAwayForAttack, CantAttackSelf):
+                except (CantAttackSameTeam, TargetTooFarAwayForAttack, CantAttackSelf, TargetIsAlreadyDead):
                     pass
         return possible_attacks
 
@@ -485,7 +500,17 @@ class TeamCtrlr:
     def get_agent(self, agent_id: AgentID) -> AgentCtrlr:
         '''Get an agent.'''
         return AgentCtrlr(id=agent_id, ctrlr=self)
-    
+
+
+class WinResult:
+    pass
+class Stalemate(WinResult):
+    pass
+
+@dataclasses.dataclass
+class TeamWins(WinResult):
+    team_id: TeamID
+    remaining_agents: int = 0
 
 @dataclasses.dataclass
 class BattleGame:
@@ -507,15 +532,48 @@ class BattleGame:
     def run(self, 
         players: dict[TeamID, typing.Callable[[TeamCtrlr],None]],
         max_turns: int = 1000,
-    ) -> None:
+        show_progress: bool = True,
+    ) -> WinResult:
         '''Run the game.'''
-        for i, ctrlr in enumerate(self.take_turns()):
-            player = players[ctrlr.team_id]
-            player(ctrlr)
+        remaining_teams = list(players)
+        i = 0
 
-            if i > max_turns:
-                break
-        return self.game_state
+        class FakeCtx:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                pass
+            def update(*args):
+                pass
+
+        ctx_manager = tqdm.tqdm(ncols=80) if show_progress else FakeCtx()
+
+        with ctx_manager as pbar:
+            while len(remaining_teams) > 1:
+                team_id = remaining_teams[i % len(remaining_teams)]
+                
+                # get the controller for the team
+                ctrlr = self.game_state.get_ctrlr(team_id)
+                
+                # get the player for the team
+                player = players[team_id]
+
+                # run the player's turn
+                player(ctrlr)
+
+                # check if there is a winner
+                remaining_teams = self.check_remaining_teams()
+
+                i += 1
+                if i > max_turns:
+                    break
+
+                pbar.update(1)
+        
+        if len(remaining_teams) == 0:
+            return Stalemate()
+        else:
+            return TeamWins(remaining_teams[0], self.game_state.get_team_counts()[remaining_teams[0]])
         
     def take_turns(self) -> TurnTracker:
         '''Take turns for all teams.'''
@@ -523,6 +581,15 @@ class BattleGame:
             game_state=self.game_state, 
             teams=list(self.team_list), 
         )
+    
+    def check_remaining_teams(self) -> TeamID | None:
+        '''Check if there is a winner.'''
+        #team_alive = {team_id: False for team_id in self.team_list}
+        remaining_teams = set()
+        for agent in self.game_state.agents.values():
+            if agent.is_alive():
+                remaining_teams.add(agent.team)
+        return list(remaining_teams)
 
 
 @dataclasses.dataclass

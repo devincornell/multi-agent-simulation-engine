@@ -5,26 +5,28 @@ import random
 
 
 @dataclasses.dataclass
-class AIRed:
+class RandomAI:
     turn_ct: int = 0
 
-    def __call__(self, ctrlr: battlegame.TeamCtrlr):
-        print(f'==================== {ctrlr.team_id} Turn ====================')
+    def __call__(self, ctrlr: battlegame.TeamCtrlr, verbose: bool = False):
+        if verbose: print(f'==================== {ctrlr.team_id} Turn {self.turn_ct} ====================')
         for agent in ctrlr.agents(team_id=ctrlr.team_id):
             # move randomly
             possible_moves = agent.identify_possible_moves()
-            move_list = list(possible_moves.keys())
-            move_choice = random.choice(move_list)
-            print(f'{move_list=}')
-            print(agent.loc.pos, move_choice)
-            agent.action_move(move_choice)
+            if len(possible_moves) > 0:
+                move_dest = random.choice(list(possible_moves.keys()))
+                agent.action_move(move_dest)
+                if verbose: print(f'Moved {agent.loc.pos} -> {move_dest}')
 
             # attack anything nearby
             targets = agent.identify_possible_attack_targets()
             if len(targets) > 0:
-                agent.action_attack(random.choice(targets))
+                target = random.choice(targets)
+                agent.action_attack(target)
+                if verbose: print(f'Attacked {agent.id} -> {target}')
         
         self.turn_ct += 1
+        if verbose: print(f'{ctrlr.game.get_team_counts()=}')
 
 @dataclasses.dataclass
 class Team:
@@ -32,8 +34,8 @@ class Team:
     size: int
 
 teams = {
-    'red': Team(AIRed(), 1),
-    'blue': Team(AIRed(), 1),
+    'red': Team(RandomAI(), 10),
+    'blue': Team(RandomAI(), 10),
 }
 
 
@@ -43,10 +45,11 @@ def main():
         map_size=10,
     )
 
-    game.run(
+    result = game.run(
         players = {tid:team.player for tid,team in teams.items()},
-        max_turns=1000,
+        max_turns=100000,
     )
+    print(result)
 
 
 if __name__ == '__main__':
