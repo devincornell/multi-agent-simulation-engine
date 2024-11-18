@@ -210,7 +210,22 @@ class GameState:
             locations=location_states,
             map = agent_locations,
         )
-    
+    ################################## get convenient lookups ##############################
+    def get_agent_loc(self, agent_id: AgentID) -> LocState:
+        '''Get the location of an agent.'''
+        try:
+            pos = self.map.get_coord(agent_id)
+        except mase.ObjectIsNotOnMap:
+            raise AgentNotOnMap()
+        try:
+            return self.locations[pos]
+        except KeyError:
+            raise LocationDoesNotExist()
+        
+    def get_loc_agents(self, pos: mase.HexCoord) -> list[AgentState]:
+        '''Get all agents at a location.'''
+        return [self.agents[aid] for aid in self.map.get_objs(pos)]
+
     ################################## get convenient objects ##############################
     def get_ctrlr(self, team_id: TeamID) -> TeamCtrlr:
         '''Get a controller for a particular team.'''
@@ -259,7 +274,7 @@ class GameState:
         new_pos: mase.HexCoord, 
         agent_team_id: TeamID | None = None,
         max_dist: int | None = None,
-        shortest_path: list[mase.HexCoord] | None = None,
+        path: list[mase.HexCoord] | None = None,
     ) -> tuple[AgentState, list[mase.HexCoord]]:
         '''Get plan and perform checks for moving an agent to a new location.
         Description: Use when trying to move an agent, because it will perform all the general checks.
@@ -268,7 +283,7 @@ class GameState:
             new_pos: position to move to.
             agent_team_id: team of the agent (if you want to perform checks)
             max_dist: maximum distance to move.
-            shortest_path: path to move along. Faster to validate this than to compute from scratch.
+            path: path to move along. Faster to validate this than to compute from scratch.
         Returns: shortest path from an agent to a location, raise exceptions if there is no path.
         '''
         agent, old_loc = self.get_agent_and_loc(agent_id)
@@ -291,9 +306,9 @@ class GameState:
             raise AnotherAgentIsAtTargetLocation()
 
         # much cheaper to validate shortest path than compute it
-        if shortest_path is None:
+        if path is None:
             try:
-                shortest_path = old_loc.pos.a_star(
+                path = old_loc.pos.a_star(
                     goal=new_pos, 
                     allowed_pos=self.valid_move_through_set(agent_id),
                     max_dist=max_dist,
@@ -305,14 +320,14 @@ class GameState:
                 )
         else:
             self.check_valid_path(
-                agent_id, 
-                old_loc.pos, 
-                new_pos, 
-                shortest_path, 
+                agent_id=agent_id, 
+                start=old_loc.pos, 
+                goal=new_pos, 
+                path=path, 
                 max_dist=max_dist,
             )
         
-        return agent, shortest_path
+        return agent, path
 
     def kill_agent(self, agent_id: AgentID) -> None:
         '''Take agent off the map and change agent state.
@@ -507,11 +522,11 @@ class AgentCtrlr:
         self.ctrlr.action_move(self.id, new_pos)
 
     ############################## get possible moves and attacks ##############################
-    def identify_possible_moves(self) -> dict[mase.HexCoord, list[mase.HexCoord]]:
+    def calc_valid_moves(self) -> dict[mase.HexCoord, list[mase.HexCoord]]:
         '''Get the possible moves for the agent.'''
-        return self.ctrlr.game.valid_move_to_set(self.id, self.state.move_distance())
+        return self.ctrlr.game.calc_valid_moves(self.id)
     
-    def identify_possible_attack_targets(self) -> list[AgentID]:
+    def identify_possible_targets(self) -> list[AgentID]:
         '''Get the possible attacks for the agent.'''
         possible_attacks = list()
         for other_id, other in self.ctrlr.game.agents.items():
@@ -571,7 +586,7 @@ class TeamCtrlr:
         if not target.is_alive():
             self.game.kill_agent(target_id)
 
-    def action_move(self, agent_id: AgentID, new_pos: mase.HexCoord):
+    def action_move(self, agent_id: AgentID, new_pos: mase.HexCoord, path: list[mase.HexCoord] | None = None) -> None:
         '''Move an agent to a new position.
         Description: implements a lot of checks against remaining turns and 
             agent/location states. Most of this function is game logic.
@@ -583,22 +598,23 @@ class TeamCtrlr:
         # checking remaining moves because it requires less of a_star.
         agent_actions = self.actions[agent_id]
 
-        agent, shortest_path = self.game.plan_move(
+        agent, path = self.game.plan_move(
             agent_id=agent_id, 
             new_pos = new_pos, 
             agent_team_id=self.team_id,
             max_dist=agent_actions.moves_remaining,
+            path=path,
         )
                 
         # change game state to reflect the move, raise exception if issue
-        agent_actions.using_move_action(len(shortest_path) - 1)
+        agent_actions.using_move_action(len(path) - 1)
         self.game.map.move_obj(agent_id, new_pos)
         
     ############################## access agent interface ##############################
     def agents(self, 
+        filter_criteria: typing.Callable[[AgentCtrlr],bool] = lambda x: True,
         team_id: TeamID|None = None, 
         alive_only: bool = True, 
-        filter_criteria: typing.Callable[[AgentCtrlr],bool] = lambda x: True
     ) -> list[AgentCtrlr]:
         '''Get all agents.'''
         agents: list[AgentCtrlr] = []

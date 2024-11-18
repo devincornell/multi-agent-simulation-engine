@@ -12,14 +12,14 @@ class RandomAI:
         if verbose: print(f'==================== {ctrlr.team_id} Turn {self.turn_ct} ====================')
         for agent in ctrlr.agents(team_id=ctrlr.team_id):
             # move randomly
-            possible_moves = agent.identify_possible_moves()
+            possible_moves = agent.calc_valid_moves()
             if len(possible_moves) > 0:
                 move_dest = random.choice(list(possible_moves.keys()))
                 agent.action_move(move_dest)
                 if verbose: print(f'Moved {agent.loc.pos} -> {move_dest}')
 
             # attack anything nearby
-            targets = agent.identify_possible_attack_targets()
+            targets = agent.identify_possible_targets()
             if len(targets) > 0:
                 target = random.choice(targets)
                 agent.action_attack(target)
