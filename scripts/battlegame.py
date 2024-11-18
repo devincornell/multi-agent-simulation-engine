@@ -178,11 +178,11 @@ class GameState:
     map: mase.ObjectMapper[AgentID, mase.HexCoord]
 
     @classmethod
-    def new(cls, num_agents: dict[TeamID, int], map_size: int, random_seed: int = 0, blocked_prob: float = 0.2) -> typing.Self:
+    def new(cls, num_agents: dict[TeamID, int], map_size: int, random_seed: int = 0, blocked_prob: float = 0.2, agent_start_level: int = 1) -> typing.Self:
         '''Initialize a new game state.'''
         random.seed(random_seed)
 
-        agent_states = AgentStates.init(num_agents, start_level=1)
+        agent_states = AgentStates.init(num_agents, start_level=agent_start_level)
         location_states = LocStates.init(map_size)
 
         # block off random locations
@@ -518,13 +518,12 @@ class BattleGame:
     team_list: list[TeamID]
 
     @classmethod
-    def new(cls, num_agents: dict[TeamID, int], map_size: int, random_seed: int = 0) -> typing.Self:
+    def new(cls, num_agents: dict[TeamID, int], **kwargts) -> typing.Self:
         '''Create a new game.'''
         return cls(
             game_state=GameState.new(
                 num_agents=num_agents, 
-                map_size=map_size, 
-                random_seed=random_seed
+                **kwargts,
             ),
             team_list=list(num_agents.keys()),
         )

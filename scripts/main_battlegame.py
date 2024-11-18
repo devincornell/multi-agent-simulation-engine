@@ -43,6 +43,8 @@ def main():
     game = battlegame.BattleGame.new(
         num_agents={tid:team.size for tid,team in teams.items()}, 
         map_size=10,
+        random_seed=1,
+        agent_start_level=3,
     )
 
     result = game.run(
