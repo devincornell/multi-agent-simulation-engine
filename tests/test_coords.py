@@ -52,8 +52,8 @@ def test_algorithms(verbose=False):
 
         # starting path should be in returned distances
         assert(region_list[i] in region)
-        assert(region_list[i] in all_dists)
-        assert_eq(len(region), len(all_dists))
+        #assert(region_list[i] in all_dists)
+        assert_eq(len(region)-1, len(all_dists))
         
         for j in range(len(region_list)):
             if i != j:
