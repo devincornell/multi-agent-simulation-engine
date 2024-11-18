@@ -356,7 +356,7 @@ class GameState:
     def valid_move_through_set(
         self, 
         agent_id: AgentID, 
-        consider_agents: bool = False, 
+        consider_agents: bool = True, 
         max_dist: int|None = None
     ) -> set[mase.HexCoord]:
         '''Goes through set of valid moves for an agent.'''
@@ -421,9 +421,19 @@ class GameState:
             max_dist: maximum distance to check.
         '''
         agent, loc = self.get_agent_and_loc(agent_id)
-        if loc.blocked or (max_dist is None or loc.pos.distance(pos) > max_dist):
+        
+        # more elegant, less efficient
+        #return not any([
+        #    self.locations[pos].blocked,
+        #    max_dist is not None and loc.pos.distance(pos) > max_dist,
+        #    consider_agents and any([self.agents[aid].team != agent.team for aid in self.map.get_objs(pos)]),
+        #])
+        
+        if self.locations[pos].blocked:
             return False
-        if not consider_agents or any([self.agents[aid].team != agent.team for aid in self.map.get_objs(pos)]):
+        if max_dist is not None and loc.pos.distance(pos) > max_dist:
+            return False
+        if consider_agents and any([self.agents[aid].team != agent.team for aid in self.map.get_objs(pos)]):
             return False
         return True
     
