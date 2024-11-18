@@ -7,7 +7,7 @@ import typing
 import dataclasses
 import random
 from pathlib import Path
-
+import functools
 import tqdm
 
 import sys
@@ -174,6 +174,9 @@ class TargetIsAlreadyDead(GameException):
 class InvalidTargetLocation:
     pass
 
+class PathIsNotValid:
+    pass
+
 @dataclasses.dataclass
 class GameState:
     agents: AgentStates
@@ -208,11 +211,21 @@ class GameState:
             map = agent_locations,
         )
     
+    ################################## get convenient objects ##############################
     def get_ctrlr(self, team_id: TeamID) -> TeamCtrlr:
         '''Get a controller for a particular team.'''
         return TeamCtrlr.start_turn(team_id=team_id, game=self)
+    
+    def get_team_counts(self) -> dict[TeamID, int]:
+        '''Get the number of agents on each team. For tracking game progress.'''
+        cts = collections.Counter()
+        for agent in self.agents.values():
+            if agent.is_alive():
+                cts[agent.team] += 1
+        return dict(cts)
 
-    ################################## check to modify game state information ##############################
+
+    ################################## validate potential actions ##############################
     def plan_attack(
         self, 
         agent_id: AgentID, 
@@ -236,8 +249,6 @@ class GameState:
             raise CantAttackSameTeam()
         
         if loc.pos.distance(target_loc.pos) > agent.attack_distance():
-            #print(loc.pos, target_loc.pos)
-            #print(loc.pos.distance(target_loc.pos), agent.attack_distance())
             raise TargetTooFarAwayForAttack()
         
         return agent, target_agent, agent.attack_power()
@@ -248,6 +259,7 @@ class GameState:
         new_pos: mase.HexCoord, 
         agent_team_id: TeamID | None = None,
         max_dist: int | None = None,
+        shortest_path: list[mase.HexCoord] | None = None,
     ) -> tuple[AgentState, list[mase.HexCoord]]:
         '''Get plan and perform checks for moving an agent to a new location.
         Description: Use when trying to move an agent, because it will perform all the general checks.
@@ -255,6 +267,8 @@ class GameState:
             agent_id: id of the agent to move.
             new_pos: position to move to.
             agent_team_id: team of the agent (if you want to perform checks)
+            max_dist: maximum distance to move.
+            shortest_path: path to move along. Faster to validate this than to compute from scratch.
         Returns: shortest path from an agent to a location, raise exceptions if there is no path.
         '''
         agent, old_loc = self.get_agent_and_loc(agent_id)
@@ -276,22 +290,27 @@ class GameState:
         if len(self.map.get_objs(new_pos)):
             raise AnotherAgentIsAtTargetLocation()
 
-        # check if there is a shortest path, get it if there is
-        try:
-            shortest_path = old_loc.pos.a_star(
-                goal=new_pos, 
-                allowed_pos=self.valid_move_through_set(agent_id),
+        # much cheaper to validate shortest path than compute it
+        if shortest_path is None:
+            try:
+                shortest_path = old_loc.pos.a_star(
+                    goal=new_pos, 
+                    allowed_pos=self.valid_move_through_set(agent_id),
+                    max_dist=max_dist,
+                )
+            except mase.NoPathFound:
+                raise NoRouteToTarget(
+                    f'Agent {agent_id} tried to move from '
+                    f'{old_loc.pos} to {new_pos}, but there is no path.'
+                )
+        else:
+            self.check_valid_path(
+                agent_id, 
+                old_loc.pos, 
+                new_pos, 
+                shortest_path, 
                 max_dist=max_dist,
             )
-        except mase.NoPathFound:
-            raise NoRouteToTarget(
-                f'Agent {agent_id} tried to move from '
-                f'{old_loc.pos} to {new_pos}, but there is no path.'
-            )
-        
-        #print(shortest_path)
-        if max_dist is not None and (len(shortest_path)-1) > max_dist:
-            raise TargetIsTooFar()
         
         return agent, shortest_path
 
@@ -303,56 +322,91 @@ class GameState:
         self.agents[agent_id].die()
 
     ################################## paths and valid moves ##############################
-    def valid_move_to_set(self, agent_id: AgentID, max_moves: int|None = None) -> dict[mase.HexCoord, list[mase.HexCoord]]:
-        '''Get positions that an agent can move to and the paths they would take.'''
+    def calc_valid_moves(
+        self,
+        agent_id: AgentID,
+    ) -> dict[mase.HexCoord, list[mase.HexCoord]]:
+        '''Get all valid moves for an agent.'''
         agent, loc = self.get_agent_and_loc(agent_id)
-        move_through_set = [pos for pos, loc in self.locations.items() if self.check_agent_can_move_through(agent_id, pos)]
-        sps = loc.pos.dijkstra(
-            allowed_pos=move_through_set,
-            max_dist=max_moves, 
-        )
-        valid_moves: dict[mase.HexCoord, list[mase.HexCoord]] = dict()
-        for pos, sp in sps.items():
-            if len(sp) and (max_moves is None or (len(sp)-1) <= max_moves) and self.check_agent_can_move_to(agent_id, pos):
-                valid_moves[pos] = sp
-        return valid_moves
-        
-    def check_agent_can_move_to(self, agent_id: AgentID, pos: mase.HexCoord) -> bool:
-        '''Check if an agent can move to a location. Does not consider distance/path.
-        Description: checks if the location is blocked or if there is another agent there.
-        '''
-        #agent, loc = self.get_agent_and_loc(agent_id)
-        loc = self.locations[pos]
-        if loc.blocked or len(self.map.get_objs(pos)):
-            return False
-        return True
+        valid_move_through = lambda loc: self.check_agent_can_move_through(agent_id=agent_id, pos=loc.pos, consider_agents=True)
+        valid_move_to = lambda loc: self.check_agent_can_move_to(agent_id=agent_id, pos=loc.pos)
 
+        return self.calc_all_paths(
+            pos=loc.pos,
+            valid_move_through=valid_move_through,
+            valid_move_to=valid_move_to,
+            max_dist=agent.move_distance(),
+        )
+    
     def valid_move_through_set(
         self, 
         agent_id: AgentID, 
         consider_agents: bool = False, 
         max_dist: int|None = None
     ) -> set[mase.HexCoord]:
-        '''Get locations that player can move through. Much simpler'''
-        move_coords = set()
-        for pos, loc in self.locations.items():
-            if self.check_agent_can_move_through(agent_id=agent_id, pos=pos, consider_agents=consider_agents, max_dist=max_dist):
-                move_coords.add(pos)
-    
-        return move_coords
+        '''Goes through set of valid moves for an agent.'''
+        valid_move_through = lambda loc: self.check_agent_can_move_through(
+            agent_id=agent_id, 
+            pos=loc.pos, 
+            consider_agents=consider_agents, 
+            max_dist=max_dist,
+        )
+        return {pos for pos, loc in self.locations.items() if valid_move_through(loc)}
+
+    ################################## movement rules ##############################
+    def check_valid_path(
+        self,
+        agent_id: AgentID,
+        start: mase.HexCoord,
+        goal: mase.HexCoord,
+        path: list[mase.HexCoord],
+        max_dist: int|None = None,
+    ):
+        '''Check if a path is valid according to game rules..'''
+        if start != path[0] or goal != path[-1] or (max_dist is not None and len(path) > max_dist):
+            raise PathIsNotValid()
+        
+        for i in range(1, len(path)):
+            if path[i].distance(path[i-1]) > 1:
+                raise PathIsNotValid()
+            if not self.check_agent_can_move_through(agent_id=agent_id, pos=path[i], max_dist=max_dist):
+                raise PathIsNotValid()
+        return True
+            
+
+    def check_agent_can_move_to(
+        self, 
+        agent_id: AgentID, 
+        pos: mase.HexCoord,
+    ) -> bool:
+        '''Check if an agent can move to a location. Does not consider distance/path.
+        Description: checks if the location is blocked or if there is another agent there.
+        Args:
+            agent_id: id of the agent to check.
+            pos: position to check.
+        '''
+        if self.locations[pos].blocked or len(self.map.get_objs(pos)):
+            return False
+        return True
 
     def check_agent_can_move_through(
         self, 
         agent_id: AgentID, 
         pos: mase.HexCoord, 
-        consider_agents: bool = False, 
+        consider_agents: bool = True, 
         max_dist: int|None = None
     ) -> bool:
         '''Check if an agent can move through a location, consider agents/teams or distance.
-        Description: checks if the location is blocked or if there is another agent there.
+        Description: Returns false if the location is blocked, if there are agents on the 
+            location, or if the location is too far away.
+        Args:
+            agent_id: id of the agent to check.
+            pos: position to check.
+            consider_agents: if True, will check if there are agents on the location.
+            max_dist: maximum distance to check.
         '''
         agent, loc = self.get_agent_and_loc(agent_id)
-        if loc.blocked or loc.pos.distance(pos) > max_dist:
+        if loc.blocked or (max_dist is None or loc.pos.distance(pos) > max_dist):
             return False
         if not consider_agents or any([self.agents[aid].team != agent.team for aid in self.map.get_objs(pos)]):
             return False
@@ -397,8 +451,9 @@ class GameState:
             can_move_to: function to check if a location can be moved to.
             max_dist: maximum distance to calculate.
         '''
+        allowed_pos = set([pos for pos, loc in self.locations.items() if valid_move_through(loc)])
         paths = pos.dijkstra(
-            allowed_pos=set([pos for pos, loc in self.locations.items() if valid_move_through(loc)]),
+            allowed_pos=allowed_pos,
             max_dist=max_dist,
         )
         return {dest:path for dest,path in paths.items() if valid_move_to(self.locations[dest])}
@@ -407,7 +462,10 @@ class GameState:
     def get_agent_and_loc(self, 
         agent_id: AgentID, 
     ) -> tuple[AgentState, LocState]:
-        '''Get the agent and its location, make sure agent is alive and on map.'''
+        '''Get the agent and its location, make sure agent is alive and on map.
+        Args:
+            agent_id: id of the agent to get.
+        '''
         try:
             agent = self.agents[agent_id]
         except KeyError:
@@ -427,16 +485,7 @@ class GameState:
         except KeyError:
             raise LocationDoesNotExist()
         
-
         return agent, loc
-    
-    def get_team_counts(self) -> dict[TeamID, int]:
-        '''Get the number of agents on each team.'''
-        cts = collections.Counter()
-        for agent in self.agents.values():
-            if agent.is_alive():
-                cts[agent.team] += 1
-        return dict(cts)
 
 
 @dataclasses.dataclass(repr=False)
