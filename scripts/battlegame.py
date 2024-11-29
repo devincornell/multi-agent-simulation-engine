@@ -135,7 +135,13 @@ class LocStates(dict[mase.HexCoord, LocState]):
         return cls(locs)
 
 class GameException(Exception):
-    pass
+    '''Base exception for game errors.'''
+    def create(self, *args, **kwargs) -> typing.Self:
+        o = self.__class__(*args)
+        for k,v in kwargs.items():
+            setattr(o, k, v)
+        return o
+    
 class AgentIsAlreadyAtLocation(GameException):
     pass
 class AnotherAgentIsAtTargetLocation(GameException):
@@ -171,10 +177,10 @@ class TargetIsTooFar(GameException):
 class TargetIsAlreadyDead(GameException):
     pass
 
-class InvalidTargetLocation:
+class InvalidTargetLocation(GameException):
     pass
 
-class PathIsNotValid:
+class PathIsNotValid(GameException):
     pass
 
 @dataclasses.dataclass
@@ -340,17 +346,38 @@ class GameState:
     def calc_valid_moves(
         self,
         agent_id: AgentID,
+        consider_agents: bool = True,
     ) -> dict[mase.HexCoord, list[mase.HexCoord]]:
         '''Get all valid moves for an agent.'''
-        agent, loc = self.get_agent_and_loc(agent_id)
-        valid_move_through = lambda loc: self.check_agent_can_move_through(agent_id=agent_id, pos=loc.pos, consider_agents=True)
-        valid_move_to = lambda loc: self.check_agent_can_move_to(agent_id=agent_id, pos=loc.pos)
+        return self.calc_reachable_paths(
+            agent_id=agent_id,
+            goal_criteria=lambda loc: self.check_agent_can_move_to(loc.pos),
+            consider_agents=consider_agents,
+            max_dist=self.agents[agent_id].move_distance(),
+        )
 
+    def calc_reachable_paths(
+        self,
+        agent_id: AgentID,
+        goal_criteria: typing.Callable[[LocState],bool] = lambda x: True,
+        consider_agents: bool = True,
+        max_dist: int|None = None,
+    ) -> dict[mase.HexCoord, list[mase.HexCoord]]:
+        '''Get paths to all locations where an agent can reach.
+        Args:
+            agent_id: id of the agent to check.
+            consider_agents: if True, will consider other agents when calculating paths.
+            valid_move_to: function to check if the destination is valid.
+            max_dist: maximum distance to calculate.
+        '''
+        agent, loc = self.get_agent_and_loc(agent_id)
+        valid_move_through = lambda loc: self.check_agent_can_move_through(agent_id=agent_id, pos=loc.pos, consider_agents=consider_agents)
+        
         return self.calc_all_paths(
             pos=loc.pos,
             valid_move_through=valid_move_through,
-            valid_move_to=valid_move_to,
-            max_dist=agent.move_distance(),
+            goal_criteria=goal_criteria,
+            max_dist=max_dist,
         )
     
     def valid_move_through_set(
@@ -378,7 +405,8 @@ class GameState:
         max_dist: int|None = None,
     ):
         '''Check if a path is valid according to game rules..'''
-        if start != path[0] or goal != path[-1] or (max_dist is not None and len(path) > max_dist):
+        #print('checkvalidpath', start, goal, path, max_dist)
+        if start != path[0] or goal != path[-1] or (max_dist is not None and (len(path)-1) > max_dist):
             raise PathIsNotValid()
         
         for i in range(1, len(path)):
@@ -391,7 +419,6 @@ class GameState:
 
     def check_agent_can_move_to(
         self, 
-        agent_id: AgentID, 
         pos: mase.HexCoord,
     ) -> bool:
         '''Check if an agent can move to a location. Does not consider distance/path.
@@ -428,7 +455,7 @@ class GameState:
         #    max_dist is not None and loc.pos.distance(pos) > max_dist,
         #    consider_agents and any([self.agents[aid].team != agent.team for aid in self.map.get_objs(pos)]),
         #])
-        
+
         if self.locations[pos].blocked:
             return False
         if max_dist is not None and loc.pos.distance(pos) > max_dist:
@@ -466,7 +493,7 @@ class GameState:
         self,
         pos: mase.HexCoord, 
         valid_move_through: typing.Callable[[LocState],bool] = lambda x: True,
-        valid_move_to: typing.Callable[[LocState],bool] = lambda x: True,
+        goal_criteria: typing.Callable[[LocState],bool] = lambda x: True,
         max_dist: int|None = None,
     ) -> dict[mase.HexCoord, list[mase.HexCoord]]:
         '''Calculate paths from one position to all others, considering rules for valid positions.
@@ -481,7 +508,7 @@ class GameState:
             allowed_pos=allowed_pos,
             max_dist=max_dist,
         )
-        return {dest:path for dest,path in paths.items() if valid_move_to(self.locations[dest])}
+        return {dest:path for dest,path in paths.items() if goal_criteria(self.locations[dest])}
 
     ################################## get agent and location information ##############################
     def get_agent_and_loc(self, 
@@ -527,14 +554,35 @@ class AgentCtrlr:
         '''Have one agent attack another.'''
         self.ctrlr.action_attack(self.id, target_id)
 
-    def action_move(self, new_pos: mase.HexCoord) -> None:
+    def action_move(self, new_pos: mase.HexCoord, path: list[mase.HexCoord]|None = None) -> None:
         '''Move the agent to a new position.'''
-        self.ctrlr.action_move(self.id, new_pos)
+        self.ctrlr.action_move(self.id, new_pos, path=path)
 
     ############################## get possible moves and attacks ##############################
     def calc_valid_moves(self) -> dict[mase.HexCoord, list[mase.HexCoord]]:
         '''Get the possible moves for the agent.'''
         return self.ctrlr.game.calc_valid_moves(self.id)
+    
+    def calc_reachable_paths(
+        self,
+        goal_criteria: typing.Callable[[LocState],bool] = lambda x: True,
+        consider_agents: bool = True,
+        max_dist: int|None = None,
+    ) -> dict[mase.HexCoord, list[mase.HexCoord]]:
+        '''Get paths to all locations within a distance, taking other agents into account.
+        Args:
+            consider_agents: if True, will consider other agents when calculating paths.
+            dest_is_valid: if True, will check if the destination is valid. Else,
+                only calculates locations where the agent can move adjacent to. This is 
+                mainly useful for looking for enemies to attack.
+            max_dist: maximum distance to calculate.
+        '''
+        return self.ctrlr.game.calc_reachable_paths(
+            agent_id=self.id,
+            goal_criteria=goal_criteria,
+            consider_agents=consider_agents,
+            max_dist=max_dist,
+        )
     
     def identify_possible_targets(self) -> list[AgentID]:
         '''Get the possible attacks for the agent.'''
